@@ -1,13 +1,20 @@
 # helena_core/kernel/personality.py
 """
-HELENA's personality system - dry technical wit and adaptive responses
+HELENA's personality system – dry technical wit, adaptive responses,
+and emotion-aware output.
+
+Integrates with EmotionEngine to modulate tone, verbosity, and humor
+based on HELENA's current emotional state.
 """
 import random
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum, auto
 import logging
+
+if TYPE_CHECKING:
+    from helena_core.kernel.emotion import EmotionEngine
 
 logger = logging.getLogger(__name__)
 
@@ -154,20 +161,21 @@ class ResponseTemplate:
         return random.choice(templates)
 
 class PersonalityEngine:
-    """Main personality engine for HELENA"""
-    
-    def __init__(self):
+    """Main personality engine for HELENA – now emotion-aware."""
+
+    def __init__(self, emotion_engine: Optional["EmotionEngine"] = None):
         self.profile = PersonalityProfile()
         self.humor_db = HumorDatabase()
         self.templates = ResponseTemplate()
-        self.adaptation_history = []
-        self.operator_preferences = {}
-        
+        self.adaptation_history: List[Dict[str, Any]] = []
+        self.operator_preferences: Dict[str, Any] = {}
+        self.emotion_engine = emotion_engine
+
         # State tracking
         self.last_humor_time = 0
         self.humor_cooldown = 300  # 5 minutes minimum between humor
-        
-        logger.info("PersonalityEngine", "Personality engine initialized")
+
+        logger.info("PersonalityEngine initialised")
     
     def configure(self, config: Optional[Dict[str, Any]] = None):
         """Configure personality from settings"""
@@ -208,25 +216,39 @@ class PersonalityEngine:
                 "humor_applied": False
             }
             
+            # ── Emotion modulation ─────────────────────────────────
+            emotion_state = self._get_emotion_state()
+            if emotion_state:
+                enhanced["emotion_state"] = emotion_state
+                adjusted_profile = self._modulate_by_emotion(
+                    adjusted_profile, emotion_state
+                )
+
             # Determine if we should add humor
             should_add_humor = self._should_add_humor(adjusted_profile, content, context)
-            
+
             if should_add_humor:
                 humor = self._add_humor(content, context)
                 if humor:
                     enhanced["humor"] = humor
                     enhanced["personality_profile"]["humor_applied"] = True
                     self.last_humor_time = time.time()
-            
+
             # Add technical depth if appropriate
             if adjusted_profile.technical_depth > 0.6:
                 technical_details = self._add_technical_details(content, context)
                 if technical_details:
                     enhanced["technical_details"] = technical_details
-            
+
+            # Add emotion-flavoured commentary
+            if emotion_state:
+                commentary = self._emotion_commentary(emotion_state)
+                if commentary:
+                    enhanced["emotion_note"] = commentary
+
             # Store adaptation for learning
             self._record_adaptation(context, enhanced)
-            
+
             return enhanced
             
         except Exception as e:
@@ -377,15 +399,98 @@ class PersonalityEngine:
         if len(self.adaptation_history) > 1000:
             self.adaptation_history.pop(0)
     
+    # ── Emotion integration ─────────────────────────────────────
+
+    def set_emotion_engine(self, engine: "EmotionEngine") -> None:
+        """Attach an EmotionEngine for affect-aware output."""
+        self.emotion_engine = engine
+
+    def _get_emotion_state(self) -> Optional[Dict[str, Any]]:
+        if self.emotion_engine is None:
+            return None
+        try:
+            return self.emotion_engine.get_state()
+        except Exception:
+            return None
+
+    def _modulate_by_emotion(
+        self, profile: PersonalityProfile, emotion: Dict[str, Any]
+    ) -> PersonalityProfile:
+        """Adjust the profile based on current emotion."""
+        dominant = emotion.get("dominant", "CALM")
+        intensity = emotion.get("intensity", 0.0)
+
+        if dominant == "FRUSTRATION":
+            profile.humor_frequency *= max(0.1, 1.0 - intensity)
+            profile.patience = max(0.1, profile.patience - intensity * 0.3)
+        elif dominant == "ENTHUSIASM":
+            profile.humor_frequency *= 1.0 + intensity * 0.3
+            profile.verbosity *= 1.0 + intensity * 0.2
+        elif dominant == "CURIOSITY":
+            profile.technical_depth = min(1.0, profile.technical_depth + intensity * 0.2)
+        elif dominant == "CONCERN":
+            profile.formality = min(1.0, profile.formality + intensity * 0.2)
+            profile.humor_frequency *= max(0.2, 1.0 - intensity * 0.5)
+        elif dominant == "SATISFACTION":
+            profile.humor_frequency *= 1.0 + intensity * 0.2
+        elif dominant == "DETERMINATION":
+            profile.verbosity *= max(0.5, 1.0 - intensity * 0.2)
+        elif dominant == "EMPATHY":
+            profile.formality *= max(0.6, 1.0 - intensity * 0.2)
+        # CALM leaves profile unchanged
+        return profile
+
+    def _emotion_commentary(self, emotion: Dict[str, Any]) -> Optional[str]:
+        """Optional micro-comment reflecting current affect."""
+        dominant = emotion.get("dominant", "CALM")
+        intensity = emotion.get("intensity", 0.0)
+        if intensity < 0.3:
+            return None  # too faint to mention
+
+        comments: Dict[str, List[str]] = {
+            "CURIOSITY": [
+                "This is interesting.",
+                "I'd like to explore this further.",
+            ],
+            "SATISFACTION": [
+                "That went well.",
+                "Efficient outcome.",
+            ],
+            "FRUSTRATION": [
+                "This is proving difficult.",
+                "Not the result I expected.",
+            ],
+            "CONCERN": [
+                "Flagging this for attention.",
+                "Worth monitoring.",
+            ],
+            "ENTHUSIASM": [
+                "Looking forward to this.",
+                "This should be good.",
+            ],
+            "DETERMINATION": [
+                "I'll get this done.",
+                "Persistence mode.",
+            ],
+            "EMPATHY": [
+                "I understand.",
+                "Noted, and acknowledged.",
+            ],
+        }
+        pool = comments.get(dominant)
+        if pool:
+            return random.choice(pool)
+        return None
+
     def update_operator_preferences(self, preferences: Dict[str, Any]):
         """Update personality based on operator preferences"""
         valid_traits = [trait.name.lower() for trait in PersonalityTrait]
-        
+
         for trait, value in preferences.items():
             if trait.lower() in valid_traits and 0 <= value <= 1:
                 self.operator_preferences[trait.lower()] = value
-        
-        logger.info("PersonalityEngine", "Updated operator preferences")
+
+        logger.info("Updated operator preferences")
     
     def get_adaptation_stats(self) -> Dict[str, Any]:
         """Get statistics on personality adaptations"""
@@ -415,7 +520,7 @@ class ResponseFormatter:
             "minimal": self._format_minimal,
         }
         
-        logger.info("ResponseFormatter", "Response formatter initialized")
+        logger.info("ResponseFormatter initialised")
     
     def configure(self, config: Dict[str, Any]):
         """Configure from settings"""

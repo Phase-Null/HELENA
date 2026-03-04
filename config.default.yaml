@@ -1,0 +1,85 @@
+# ────────────────────────────────────────────────────────────────
+# HELENA – Default Configuration
+# Copy to config.yaml and adjust to your environment.
+# ────────────────────────────────────────────────────────────────
+
+# ── Operator ──────────────────────────────────────────────────
+operator:
+  name: "Operator"
+  security_level: "admin"
+
+# ── Kernel ────────────────────────────────────────────────────
+kernel:
+  default_mode: "ENGINEERING"
+  max_concurrent_tasks: 8
+  task_timeout_seconds: 300
+  enable_background_mode: true
+
+# ── Runtime ───────────────────────────────────────────────────
+runtime:
+  cpu_limit_percent: 80
+  ram_limit_mb: 4096
+  gpu_enabled: false
+  gaming_compat: true          # throttle when games are detected
+  power_profile: "balanced"    # balanced | performance | efficiency
+
+# ── Memory ────────────────────────────────────────────────────
+memory:
+  vector_dimension: 384
+  max_entries: 100000
+  persistence_dir: "data/memory"
+  graph_file: "data/memory/graph.json"
+
+# ── Chat ──────────────────────────────────────────────────────
+chat:
+  max_history: 200
+  response_max_length: 2000
+  enable_memory_integration: true
+  enable_emotion_integration: true
+
+# ── Emotion ───────────────────────────────────────────────────
+emotion:
+  enabled: true
+  decay_interval_seconds: 60
+  max_events: 1000
+
+# ── Personality ───────────────────────────────────────────────
+personality:
+  verbosity: 0.4
+  technical_depth: 0.8
+  humor_threshold: 0.7
+  creativity_level: 0.6
+  formality_level: 0.8
+  response_style: "concise_technical"
+
+# ── Training ──────────────────────────────────────────────────
+training:
+  enabled: true
+  schedule_interval: 3600      # seconds between auto-training cycles
+  min_cooldown: 600
+  daily_time: "02:00"
+  weekly_day: "sunday"
+  weekly_time: "03:00"
+  idle_minutes: 30
+  max_duration_hours: 2
+
+# ── Security ──────────────────────────────────────────────────
+security:
+  kill_switch_enabled: true
+  regulatory_core_enabled: true
+  allow_network_scan: false
+  allow_code_execution: true
+  allow_autonomous_upgrade: false
+
+# ── Modules ───────────────────────────────────────────────────
+modules:
+  directory: "modules"
+  auto_discover: true
+  auto_load: false             # require explicit load for safety
+
+# ── Logging ───────────────────────────────────────────────────
+logging:
+  level: "INFO"                # DEBUG | INFO | WARNING | ERROR
+  file: "data/logs/helena.log"
+  max_size_mb: 50
+  backup_count: 5

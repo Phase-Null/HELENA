@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Dict, Any
 
 from helena_core.utils.logging import get_logger
 
@@ -17,7 +18,7 @@ class Sandbox:
     def __init__(self, project_root: Path):
         self.root = project_root
 
-    def test_patch(self, patch: dict[str, any]) -> dict[str, any]:
+    def test_patch(self, patch: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply patch to a copy of the codebase, run tests, measure performance.
         """

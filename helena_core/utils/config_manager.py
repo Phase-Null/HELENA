@@ -303,8 +303,8 @@ class ConfigManager:
             logger.error(f"Failed to save config: {e}")
             return False
     
-    def get_section(self, section: ConfigSection) -> Any:
-        """Get configuration section"""
+    def get_section(self, section) -> Any:
+        """Get configuration section. Accepts ConfigSection enum or string name."""
         section_map = {
             ConfigSection.SYSTEM: self.config.system,
             ConfigSection.PERFORMANCE: self.config.performance,
@@ -314,6 +314,15 @@ class ConfigManager:
             ConfigSection.TRAINING: self.config.training,
             ConfigSection.MODULES: self.config.modules,
         }
+        # Support string lookups (callers often pass "training", "memory", etc.)
+        if isinstance(section, str):
+            section_upper = section.upper()
+            for cs in ConfigSection:
+                if cs.name == section_upper or cs.value == section.lower():
+                    section = cs
+                    break
+            else:
+                return None
         return section_map.get(section)
     
     def update_section(self, section: ConfigSection, updates: Dict[str, Any]) -> bool:

@@ -30,7 +30,8 @@ class ModeConfig:
 class ModeProcessor:
     """Process tasks according to current operational mode"""
     
-    def __init__(self):
+    def __init__(self, kernel=None):
+        self.kernel = kernel
         self.processors: Dict[OperationalMode, Callable] = {}
         self.configs: Dict[OperationalMode, ModeConfig] = {}
         
@@ -121,7 +122,7 @@ class ModeProcessor:
         if command == "chat":
             message = task.parameters.get("message", "")
             # Check if kernel has LLM attached
-            llm = getattr(self.kernel, 'llm', None)
+            llm = self.kernel.llm if self.kernel and hasattr(self.kernel, 'llm') else None
             if llm:
                 # Generate response
                 response = llm.generate(prompt=f"User: {message}\nAssistant:", max_tokens=200, temperature=0.7)
