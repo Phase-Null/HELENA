@@ -34,3 +34,11 @@ class ImprovementLog:
     def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent improvements"""
         return self.logs[-limit:]
+
+    def calculate_total_impact(self) -> Dict[str, int]:
+        """Calculate total impact across all logged improvements."""
+        impact: Dict[str, int] = {}
+        for entry in self.logs:
+            imp_type = entry.get("type", "unknown")
+            impact[imp_type] = impact.get(imp_type, 0) + 1
+        return impact

@@ -337,6 +337,28 @@ class ConsistencyValidator(Validator):
         
         return issues
 
+class RegulatoryValidator(Validator):
+    """Validator that delegates to the RegulatoryCore."""
+
+    def __init__(self, regulatory_core):
+        super().__init__("RegulatoryValidator", ValidationLevel.CRITICAL)
+        self.regulatory_core = regulatory_core
+
+    def _validate_impl(self, task) -> List[ValidationIssue]:
+        violations = self.regulatory_core.check(task)
+        issues: List[ValidationIssue] = []
+        for v in violations:
+            level = ValidationLevel.CRITICAL if v.blocked else ValidationLevel.HIGH
+            issues.append(ValidationIssue(
+                level=level,
+                message=v.rule_description,
+                code=f"REGULATORY_{v.rule_id}",
+                details={"reason": v.reason, "rule_id": v.rule_id},
+                suggestion="Blocked by regulatory rule" if v.blocked else "Advisory violation",
+            ))
+        return issues
+
+
 class ValidationChain:
     """Chain of validators for multi-pass validation"""
     
@@ -345,15 +367,17 @@ class ValidationChain:
         self.validation_cache = {}
         self.cache_size = 1000
     
-    def setup_default_validators(self):
-        """Setup default validation chain"""
+    def setup_default_validators(self, regulatory_core=None):
+        """Setup default validation chain, optionally with RegulatoryCore."""
         self.validators = [
             SecurityValidator(),
             SyntaxValidator(),
             ResourceValidator(),
             ConsistencyValidator(),
         ]
-        logger.info("ValidationChain", f"Loaded {len(self.validators)} validators")
+        if regulatory_core is not None:
+            self.validators.insert(0, RegulatoryValidator(regulatory_core))
+        logger.info("ValidationChain: loaded %d validators", len(self.validators))
     
     def add_validator(self, validator: Validator):
         """Add a validator to the chain"""

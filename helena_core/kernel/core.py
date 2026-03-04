@@ -386,7 +386,7 @@ class HELENAKernel:
         self.personality_engine = PersonalityEngine()
         self.response_formatter = ResponseFormatter()
         self.learning_hook = LearningHook()
-        self.mode_processor = ModeProcessor()
+        self.mode_processor = ModeProcessor(kernel=self)
         
         # Initialize LLM for chat
         try:

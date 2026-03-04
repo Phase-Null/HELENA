@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# HELENA runtime data (generated at runtime, not tracked)
+helena_memory/
+helena_data/
+helena_temp/
+logs/
+training/
+
+# Encrypted configs (generated per-install)
+config.yaml
+config.bak
+
+# Models (too large for git)
+models/*.gguf
+models/*.bin
+
+# Database files
+*.db
+*.sqlite3
