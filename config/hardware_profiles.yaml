@@ -1,0 +1,69 @@
+# config/hardware_profiles.yaml
+hardware_profiles:
+  minimal:
+    description: "Low-end systems (< 8GB RAM)"
+    performance:
+      cpu_limit_normal: 30.0
+      cpu_limit_background: 15.0
+      cpu_limit_turbo: 50.0
+      ram_limit_normal_mb: 2048
+      ram_limit_background_mb: 1024
+      ram_limit_turbo_mb: 4096
+    memory:
+      max_working_memories: 500
+      max_short_term_memories: 50000
+      cache_size: 500
+    modules:
+      max_cpu_percent: 15.0
+      max_memory_mb: 256
+  
+  standard:
+    description: "Typical systems (8-16GB RAM)"
+    performance:
+      cpu_limit_normal: 50.0
+      cpu_limit_background: 25.0
+      cpu_limit_turbo: 80.0
+      ram_limit_normal_mb: 4096
+      ram_limit_background_mb: 2048
+      ram_limit_turbo_mb: 8192
+    memory:
+      max_working_memories: 1000
+      max_short_term_memories: 100000
+      cache_size: 1000
+    modules:
+      max_cpu_percent: 25.0
+      max_memory_mb: 512
+  
+  performance:
+    description: "High-end systems (16-32GB RAM)"
+    performance:
+      cpu_limit_normal: 70.0
+      cpu_limit_background: 35.0
+      cpu_limit_turbo: 95.0
+      ram_limit_normal_mb: 8192
+      ram_limit_background_mb: 4096
+      ram_limit_turbo_mb: 16384
+    memory:
+      max_working_memories: 2000
+      max_short_term_memories: 200000
+      cache_size: 2000
+    modules:
+      max_cpu_percent: 40.0
+      max_memory_mb: 1024
+  
+  workstation:
+    description: "Workstation systems (> 32GB RAM)"
+    performance:
+      cpu_limit_normal: 80.0
+      cpu_limit_background: 40.0
+      cpu_limit_turbo: 100.0
+      ram_limit_normal_mb: 16384
+      ram_limit_background_mb: 8192
+      ram_limit_turbo_mb: 32768
+    memory:
+      max_working_memories: 5000
+      max_short_term_memories: 500000
+      cache_size: 5000
+    modules:
+      max_cpu_percent: 60.0
+      max_memory_mb: 2048

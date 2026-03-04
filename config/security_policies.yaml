@@ -1,0 +1,49 @@
+# config/security_policies.yaml
+security_policies:
+  default:
+    encryption:
+      required: true
+      algorithms: ["AES-256-GCM", "ChaCha20-Poly1305"]
+      key_rotation_days: 90
+    
+    authentication:
+      max_attempts: 5
+      lockout_minutes: 15
+      require_hardware_token: false
+    
+    network:
+      default_policy: "deny"
+      allowed_actions: ["documentation_download", "vulnerability_db_sync"]
+      require_approval: ["external_command", "upload", "active_probe"]
+    
+    modules:
+      sandbox_required: true
+      max_privilege_level: 2
+      require_digital_signature: true
+      allowed_permissions: ["cpu_read", "memory_read", "filesystem_sandbox"]
+      prohibited_permissions: ["network_raw", "hardware_direct", "process_spawn"]
+    
+    memory:
+      encryption_at_rest: true
+      encryption_in_memory: true
+      max_unencrypted_cache_mb: 10
+      secure_deletion_passes: 3
+  
+  strict:
+    extends: "default"
+    encryption:
+      key_rotation_days: 30
+    authentication:
+      require_hardware_token: true
+    modules:
+      max_privilege_level: 1
+    network:
+      default_policy: "deny_all"
+  
+  permissive:
+    extends: "default"
+    modules:
+      sandbox_required: false
+      max_privilege_level: 3
+    network:
+      default_policy: "allow_approved"
