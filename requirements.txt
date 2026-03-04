@@ -1,0 +1,70 @@
+# Core system monitoring
+psutil>=5.9.0
+py-cpuinfo>=9.0.0
+GPUtil>=1.4.0
+pynvml>=11.5.0
+
+# GUI (Qt6 for Windows)
+PySide6>=6.5.0
+PySide6-Addons>=6.5.0
+PySide6-Essentials>=6.5.0
+
+# Cryptography & security
+cryptography>=41.0.0
+argon2-cffi>=21.3.0
+bandit>=1.7.0
+safety>=2.0.0
+
+# Configuration
+pyyaml>=6.0
+toml>=0.10.2
+
+# Machine learning core
+numpy>=1.24.0
+sentence-transformers>=2.2.2
+transformers>=4.30.0
+torch>=2.0.0
+accelerate>=0.20.0
+
+# Optional ML backends (install only if needed)
+# llama-cpp-python>=0.2.0
+# ctransformers>=0.2.0
+
+# Vector & graph databases
+chromadb>=0.4.0
+hnswlib>=0.7.0
+networkx>=3.0
+
+# Serialization (fast)
+msgpack>=1.0.0
+orjson>=3.9.0
+
+# Networking
+aiohttp>=3.8.0
+websockets>=11.0.0
+
+# Development & testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+mypy>=1.0.0
+black>=23.0.0
+flake8>=6.0.0
+
+# Windows-specific API
+pywin32>=305; sys_platform == 'win32'
+
+# Utilities
+tqdm>=4.65.0
+colorama>=0.4.0
+rich>=13.0.0
+
+# Optional: TensorFlow (uncomment only if you need it)
+# tensorflow>=2.13.0; python_version < '3.12'
+
+# Optional: ONNX and OpenVINO (advanced)
+# onnxruntime>=1.15.0
+# openvino>=2023.0.0
+# Added for LLM and training
+llama-cpp-python>=0.2.0
+sentence-transformers>=2.2.2
+huggingface_hub>=0.20.0

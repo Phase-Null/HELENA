@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+"""
+HELENA SIMPLE WINDOWS VERSION
+================================
+Just run this - everything is included!
+"""
+import sys
+import os
+import json
+import time
+import threading
+from datetime import datetime
+
+print("\n" + "="*60)
+print("HELENA AI System - Simple Windows Version")
+print("="*60)
+print("Loading...")
+
+# Simple HELENA Kernel
+class SimpleKernel:
+    def __init__(self):
+        self.mode = "engineering"
+        self.personality = "pragmatic"
+        
+    def process(self, command):
+        responses = {
+            "hello": "HELENA: Hello! Ready to assist with engineering tasks.",
+            "help": """HELENA: Available commands:
+  - hello: Greet HELENA
+  - help: Show this help
+  - status: System status
+  - code [language]: Generate example code
+  - analyze [code]: Analyze code
+  - exit: Quit""",
+            "status": f"HELENA: System operational. Mode: {self.mode}. Time: {datetime.now().strftime('%H:%M:%S')}",
+            "code": "HELENA: Here's example Python code:\n\n```python\ndef helena_example():\n    \"\"\"HELENA-generated function\"\"\"\n    print('Hello from HELENA!')\n    return {'status': 'success'}\n```",
+            "analyze": "HELENA: Code analysis complete. No issues found. Suggestion: Add type hints for better clarity."
+        }
+        
+        for key in responses:
+            if command.startswith(key):
+                return responses[key]
+        
+        return f"HELENA: Command '{command}' received. Processing... (Type 'help' for commands)"
+
+# Simple Memory System
+class SimpleMemory:
+    def __init__(self):
+        self.memories = []
+        
+    def store(self, content):
+        memory_id = f"mem_{len(self.memories)}"
+        self.memories.append({
+            "id": memory_id,
+            "content": content,
+            "time": time.time()
+        })
+        return memory_id
+    
+    def recall(self):
+        if not self.memories:
+            return "No memories yet."
+        return f"Stored {len(self.memories)} memories. Last: {self.memories[-1]['content'][:50]}..."
+
+# Main System
+class SimpleHELENA:
+    def __init__(self):
+        self.kernel = SimpleKernel()
+        self.memory = SimpleMemory()
+        self.running = True
+        
+        print("✓ Kernel initialized")
+        print("✓ Memory system ready")
+        print("✓ AI models loaded (simulated)")
+        print("\n" + "="*60)
+        print("HELENA READY!")
+        print("="*60)
+        print("\nType 'help' for commands, 'exit' to quit\n")
+    
+    def run(self):
+        while self.running:
+            try:
+                # Get user input
+                user_input = input("You: ").strip().lower()
+                
+                if user_input == "exit":
+                    print("HELENA: Shutting down. Goodbye!")
+                    self.running = False
+                    break
+                
+                # Process command
+                response = self.kernel.process(user_input)
+                print(response)
+                
+                # Store in memory
+                if user_input not in ["exit", ""]:
+                    self.memory.store(user_input)
+                
+            except KeyboardInterrupt:
+                print("\nHELENA: Interrupted. Type 'exit' to quit.")
+            except Exception as e:
+                print(f"HELENA: Error - {e}")
+
+# Windows-specific GUI
+def create_simple_gui():
+    try:
+        from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, 
+                                      QVBoxLayout, QTextEdit, QLineEdit, 
+                                      QPushButton, QLabel)
+        from PySide6.QtCore import Qt
+        import sys
+        
+        class HELENAGUI(QMainWindow):
+            def __init__(self):
+                super().__init__()
+                self.helena = SimpleHELENA()
+                self.setup_ui()
+                
+            def setup_ui(self):
+                self.setWindowTitle("HELENA AI - Simple GUI")
+                self.setGeometry(100, 100, 800, 600)
+                
+                # Central widget
+                central = QWidget()
+                self.setCentralWidget(central)
+                layout = QVBoxLayout(central)
+                
+                # Title
+                title = QLabel("HELENA AI System")
+                title.setStyleSheet("font-size: 20px; font-weight: bold; color: #4A90E2;")
+                title.setAlignment(Qt.AlignCenter)
+                layout.addWidget(title)
+                
+                # Chat display
+                self.chat_display = QTextEdit()
+                self.chat_display.setReadOnly(True)
+                self.chat_display.append("HELENA: System initialized. Ready to assist!")
+                layout.addWidget(self.chat_display)
+                
+                # Input area
+                input_layout = QVBoxLayout()
+                
+                self.user_input = QLineEdit()
+                self.user_input.setPlaceholderText("Type your command here...")
+                self.user_input.returnPressed.connect(self.process_input)
+                input_layout.addWidget(self.user_input)
+                
+                send_btn = QPushButton("Send")
+                send_btn.clicked.connect(self.process_input)
+                input_layout.addWidget(send_btn)
+                
+                layout.addLayout(input_layout)
+                
+                # Status bar
+                self.statusBar().showMessage("Mode: Engineering | Ready")
+                
+            def process_input(self):
+                user_text = self.user_input.text().strip()
+                if not user_text:
+                    return
+                
+                # Display user message
+                self.chat_display.append(f"\nYou: {user_text}")
+                self.user_input.clear()
+                
+                # Process through HELENA
+                response = self.helena.kernel.process(user_text)
+                
+                # Display HELENA response
+                self.chat_display.append(f"\n{response}")
+                
+                # Scroll to bottom
+                self.chat_display.verticalScrollBar().setValue(
+                    self.chat_display.verticalScrollBar().maximum()
+                )
+                
+                # Store in memory
+                self.helena.memory.store(user_text)
+                
+                # Update status
+                self.statusBar().showMessage(f"Memory: {len(self.helena.memory.memories)} items")
+        
+        # Start GUI
+        app = QApplication(sys.argv)
+        window = HELENAGUI()
+        window.show()
+        return app.exec()
+        
+    except ImportError:
+        print("GUI not available. Running in console mode...")
+        helena = SimpleHELENA()
+        helena.run()
+        return 0
+
+# Main function
+def main():
+    print("\nChoose mode:")
+    print("1. Console (Text only)")
+    print("2. GUI (With windows)")
+    
+    choice = input("\nEnter choice [1 or 2]: ").strip()
+    
+    if choice == "2":
+        return create_simple_gui()
+    else:
+        helena = SimpleHELENA()
+        helena.run()
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
