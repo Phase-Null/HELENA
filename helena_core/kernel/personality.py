@@ -177,22 +177,31 @@ class PersonalityEngine:
 
         logger.info("PersonalityEngine initialised")
     
-    def configure(self, config: Optional[Dict[str, Any]] = None):
-        """Configure personality from settings"""
-        if config is None:
-            config = {}
-        try:
-            self.profile.verbosity = config.get("verbosity", 0.4)
+    
+    def configure(self, config=None):
+    """Configure personality from settings (handles dataclass or dict)"""
+    if config is None:
+        return
+    try:
+        if hasattr(config, "verbosity"):
+            # PersonalityConfig dataclass — read attributes directly
+            self.profile.verbosity       = config.verbosity
+            self.profile.technical_depth = config.technical_depth
+            self.profile.humor_frequency = config.humor_threshold
+            self.profile.creativity      = config.creativity_level
+            self.profile.formality       = config.formality_level
+            self.profile.response_style  = config.response_style
+        else:
+            # Plain dict fallback
+            self.profile.verbosity       = config.get("verbosity", 0.4)
             self.profile.technical_depth = config.get("technical_depth", 0.8)
             self.profile.humor_frequency = config.get("humor_threshold", 0.7)
-            self.profile.creativity = config.get("creativity_level", 0.6)
-            self.profile.formality = config.get("formality_level", 0.8)
-            self.profile.response_style = config.get("response_style", "concise_technical")
-            
-            logger.debug("PersonalityEngine", "Personality configured from settings")
-            
-        except Exception as e:
-            logger.error("PersonalityEngine", f"Configuration failed: {e}")
+            self.profile.creativity      = config.get("creativity_level", 0.6)
+            self.profile.formality       = config.get("formality_level", 0.8)
+            self.profile.response_style  = config.get("response_style", "concise_technical")
+        logger.info("Personality configured successfully")
+    except Exception as e:
+        logger.warning(f"Personality configure failed: {e}")
     
     def apply(self, 
               content: Dict[str, Any],
@@ -252,7 +261,7 @@ class PersonalityEngine:
             return enhanced
             
         except Exception as e:
-            logger.error("PersonalityEngine", f"Personality application failed: {e}")
+            logger.error(f"PersonalityEngine: Personality application failed: {e}")
             return content  # Return original on error
     
     def _adjust_for_context(self, context: Any) -> PersonalityProfile:
@@ -556,7 +565,7 @@ class ResponseFormatter:
             return formatted
             
         except Exception as e:
-            logger.error("ResponseFormatter", f"Formatting failed: {e}")
+            logger.error(f"ResponseFormatter: Formatting failed: {e}")
             # Return minimal formatted version
             return {
                 "output": content.get("error", "Formatting error occurred"),
@@ -728,3 +737,4 @@ class ResponseFormatter:
                 return f"Recommendation: {rec['action']}"
         
         return "Task executed successfully"
+
