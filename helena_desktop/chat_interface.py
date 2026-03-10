@@ -25,7 +25,7 @@ class ChatWorker(QThread):
             priority=TaskPriority.NORMAL
         )
         # Wait for result - should be fast now with simple fallback
-        max_attempts = 50  # 50 * 0.1s = 5 seconds max
+        max_attempts = 300  # 300 * 0.1s = 30 seconds max
         for attempt in range(max_attempts):
             time.sleep(0.1)
             result = self.kernel.get_task_status(task_id)
@@ -100,4 +100,5 @@ class ChatInterface(QWidget):
             else:
                 self.display.append(f"<b>HELENA:</b> (no response)")
         else:
+
             self.display.append(f"<b>HELENA:</b> (no response)")
