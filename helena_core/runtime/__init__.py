@@ -102,8 +102,8 @@ class HELENARuntime:
             
             # Configure profile manager
             if perf_config:
-                self.profile_manager.auto_switch_enabled = perf_config.get("auto_throttle", True)
-                self.gaming_optimizer.auto_optimize = perf_config.get("gaming_mode_auto", True)
+               self.profile_manager.auto_switch_enabled = perf_config.auto_throttle
+               self.gaming_optimizer.auto_optimize = perf_config.gaming_mode_auto
                 
             logger.debug("HELENARuntime", "Runtime configuration loaded")
             
@@ -344,3 +344,4 @@ class HELENARuntime:
             'profile': 'IDLE',
             'message': 'Maximum resource reduction applied'
         }
+
