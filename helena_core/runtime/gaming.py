@@ -77,7 +77,7 @@ class GamingOptimizer:
             'gpu_usage_min': 50.0,  # Minimum GPU usage to consider gaming
             'cpu_usage_min': 30.0,  # Minimum CPU usage
             'process_lifetime_min': 10.0,  # Minimum seconds process has been running
-            'confidence_threshold': 0.7,  # Confidence score to trigger detection
+            'confidence_threshold': 0.35,  # Confidence score to trigger detection
         }
         
         # Monitoring
@@ -643,3 +643,4 @@ class GamingOptimizer:
         except Exception as e:
             logger.error("GamingOptimizer", f"Failed to import game profile: {e}")
             return False
+
