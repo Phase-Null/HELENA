@@ -218,6 +218,7 @@ class PermissionManager:
                 "network_access": True,
                 "training_start": True,
                 "security_override": True,
+                "chat": True,
             },
             OperationalMode.TOOL: {
                 "code_generate": True,
@@ -228,6 +229,7 @@ class PermissionManager:
                 "network_access": False,
                 "training_start": False,
                 "security_override": False,
+                "chat": True,
             },
             OperationalMode.DEFENSIVE: {
                 "code_generate": False,
@@ -238,6 +240,7 @@ class PermissionManager:
                 "network_access": True,
                 "training_start": False,
                 "security_override": True,
+                "chat": True,
             },
             OperationalMode.BACKGROUND: {
                 "code_generate": False,
@@ -248,6 +251,7 @@ class PermissionManager:
                 "network_access": False,
                 "training_start": False,
                 "security_override": False,
+                "chat": True
             }
         }
         
@@ -390,7 +394,7 @@ class HELENAKernel:
         
         # Initialize LLM for chat
         try:
-            from ..ml.llm import HybridLLM
+            from helena_ml.llm import HybridLLM
             self.llm = HybridLLM()
         except Exception as e:
             logger.warning("HELENAKernel", f"Failed to initialize LLM: {e}")
@@ -691,7 +695,7 @@ class HELENAKernel:
         # Opportunity 2: Validation patterns
         if result.validation_result:
             for issue in result.validation_result.issues:
-                if issue["severity"] == "warning":
+                if issue.level.name == "warning":
                     opportunities.append({
                         "type": "validation_refinement",
                         "issue": issue,
@@ -1004,3 +1008,4 @@ class HELENAKernel:
             }
         else:
             return {"type": type(result.output).__name__}
+
