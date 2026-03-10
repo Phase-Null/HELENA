@@ -32,8 +32,8 @@ class AutonomousTrainer:
 
         # Subcomponents
         self.dataset = TrainingDataset(
-            self.config.get('storage_path', '~/.helena/training_data'),
-            max_size=self.config.get('max_size', 10000)
+            str(Path.home() / '.helena' / 'training_data'),
+            max_size=10000
         )
         self.auditor = SecurityAuditor({})
         self.pattern_recognizer = PatternRecognizer()
@@ -41,7 +41,7 @@ class AutonomousTrainer:
         self.refinement_engine = ModelRefinementEngine(kernel, memory)
         self.sandbox = Sandbox(Path(__file__).parent.parent)
         self.improvement_log = ImprovementLog(
-            self.config.get('log_path', '~/.helena/logs/improvements.json')
+            str(Path.home() / '.helena' / 'logs' / 'improvements.json')
         )
         self.scheduler = TrainingScheduler(self, self.config)
         self.code_model = CodeModel(Path(__file__).parent.parent)
@@ -132,7 +132,7 @@ class AutonomousTrainer:
     def _collect_data(self, focus_areas):
         data = {
             'timestamp': time.time(),
-            'focus_areas': focus_areas or self.config.get('focus_areas', []),
+            'focus_areas': focus_areas or getattr(self.config, 'focus_areas', []),
             'sources': {}
         }
         if hasattr(self.kernel, 'learning_hook'):
@@ -151,3 +151,4 @@ class AutonomousTrainer:
             'improvement_stats': self.improvement_log.calculate_total_impact(),
             'dataset_stats': self.dataset.get_statistics(),
         }
+
