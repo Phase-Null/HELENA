@@ -365,10 +365,9 @@ class ResourceManager:
                     violation['action_taken'] = action_result
                     self.on_limit_violation(violation)
                 
-                logger.warning("ResourceManager",
-                              f"Limit violation: {limit.resource_type.name} "
-                              f"({violation['current_value']:.1f} > {limit.max_usage:.1f}), "
-                              f"action: {limit.action}")
+                logger.warning(f"ResourceManager: Limit violation: {limit.resource_type.name} "
+                               f"({violation['current_value']:.1f} > {limit.max_usage:.1f}), "
+                               f"action: {limit.action}")
     
     def _execute_limit_action(self, 
                              limit: ResourceLimit,
@@ -752,3 +751,4 @@ class ResourceManager:
                               if self.hardware.memory.total_mb > 0 else 0
             }
         }
+
