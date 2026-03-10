@@ -48,18 +48,18 @@ class PerformanceConfig:
     default_profile: str = "normal"
     auto_throttle: bool = True
     gaming_mode_auto: bool = True
-    cpu_idle_threshold: float = 30.0  # Percent
+    cpu_idle_threshold: float = 50.0  # Percent
     thermal_threshold: float = 85.0   # Celsius
     response_time_target_ms: int = 1000
     
     # Resource limits
-    cpu_limit_normal: float = 50.0    # Percent
-    cpu_limit_background: float = 25.0
-    cpu_limit_turbo: float = 80.0
+    cpu_limit_normal: float = 85.0   # Percent
+    cpu_limit_background: float = 40.0
+    cpu_limit_turbo: float = 95.0
     
-    ram_limit_normal_mb: int = 4096
-    ram_limit_background_mb: int = 2048
-    ram_limit_turbo_mb: int = 8192
+    ram_limit_normal_mb: int = 12276
+    ram_limit_background_mb: int = 6138
+    ram_limit_turbo_mb: int = 24552
     
 @dataclass  
 class MemoryConfig:
@@ -508,3 +508,4 @@ def get_config_manager(config_path: Optional[Path] = None) -> ConfigManager:
     if _config_manager is None:
         _config_manager = ConfigManager(config_path)
     return _config_manager
+
