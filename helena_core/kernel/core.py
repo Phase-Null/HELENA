@@ -240,7 +240,7 @@ class PermissionManager:
                 "network_access": True,
                 "training_start": False,
                 "security_override": True,
-                "chat": True,
+                "chat": False,
             },
             OperationalMode.BACKGROUND: {
                 "code_generate": False,
@@ -251,7 +251,7 @@ class PermissionManager:
                 "network_access": False,
                 "training_start": False,
                 "security_override": False,
-                "chat": True
+                "chat": False
             }
         }
         
@@ -1008,4 +1008,5 @@ class HELENAKernel:
             }
         else:
             return {"type": type(result.output).__name__}
+
 
