@@ -31,11 +31,15 @@ class ChatWorker(QThread):
             if result and result.get("status") == "completed":
                 task_result = result.get("result", {})
                 if isinstance(task_result, dict):
-                    output = (task_result.get("result", {}).get("summary")
-                              or task_result.get("summary")
-                              or task_result.get("result")
-                              or task_result.get("output")
-                              or str(task_result))
+                    inner = task_result.get("result", {})
+                    if isinstance(inner, dict) and inner.get("summary"):
+                        output = inner.get("summary")
+                    elif task_result.get("summary"):
+                        output = task_result.get("summary")
+                    elif isinstance(inner, str) and inner:
+                        output = inner
+                    else:
+                        output = str(task_result)
                 else:
                     output = str(task_result)
                 self.response_ready.emit({"output": output})
@@ -99,3 +103,4 @@ class ChatInterface(QWidget):
                 self.display.append(f"<b>HELENA:</b> (no response)")
         else:
             self.display.append(f"<b>HELENA:</b> (no response)")
+
