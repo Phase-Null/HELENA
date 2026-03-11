@@ -474,10 +474,11 @@ class ChatEngine:
     """
 
     def __init__(self, memory=None, emotion_engine=None,
-                 personality_engine=None) -> None:
+                 personality_engine=None, llm=None) -> None:
         self.memory = memory
         self.emotion_engine = emotion_engine
         self.personality = personality_engine
+        self.llm = llm
 
         self._classifier = IntentClassifier()
         self._knowledge = KnowledgeBase()
