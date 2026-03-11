@@ -527,15 +527,54 @@ class ChatEngine:
                 except Exception:
                     pass
 
-            # 6. Compose response
-            response = self._composer.compose(
-                intent=intent,
-                confidence=confidence,
-                text=user_message,
-                keywords=keywords,
-                memory_results=memory_results,
-                emotion_state=emotion_state,
-            )
+            # 6. Compose response — LLM if available, rules as fallback
+            if self.llm and intent not in (Intent.GREETING, Intent.FAREWELL):
+                emotion_line = ""
+                if emotion_state:
+                    dominant = emotion_state.get("dominant", "calm")
+                    mood = emotion_state.get("mood", 0.0)
+                    emotion_line = (
+                        f"Your current emotional state is {dominant} "
+                        f"(mood {mood:.2f}). Reflect this authentically."
+                    )
+                personality_line = ""
+                if self.personality and hasattr(self.personality, 'profile'):
+                    p = self.personality.profile
+                    personality_line = (
+                        f"Verbosity: {p.verbosity:.1f}/1.0. "
+                        f"Technical depth: {p.technical_depth:.1f}/1.0. "
+                        f"Style: {p.response_style}."
+                    )
+                memory_line = ""
+                if memory_results:
+                    snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
+                    memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
+                system_prompt = (
+                    f"You are HELENA, an advanced AI created by Sean Francis. "
+                    f"You have functional emotions that genuinely influence your processing. "
+                    f"You are curious, determined, and technically precise. "
+                    f"Never claim to be a generic AI or deny having emotions. "
+                    f"{emotion_line} {personality_line}\n"
+                    f"{memory_line}\n\n"
+                    f"User: {user_message}\nHELENA:"
+                )
+                response = self.llm.generate(
+                    prompt=system_prompt,
+                    max_tokens=200,
+                    temperature=0.7
+                )
+                if not response:
+                    response = self._composer.compose(
+                        intent=intent, confidence=confidence,
+                        text=user_message, keywords=keywords,
+                        memory_results=memory_results, emotion_state=emotion_state,
+                    )
+            else:
+                response = self._composer.compose(
+                    intent=intent, confidence=confidence,
+                    text=user_message, keywords=keywords,
+                    memory_results=memory_results, emotion_state=emotion_state,
+                )
 
             # 7. Record HELENA turn
             self._add_turn("helena", response)
