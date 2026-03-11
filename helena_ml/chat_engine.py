@@ -601,7 +601,7 @@ class ChatEngine:
         lines = []
         for turn in recent:
             role = "User" if turn.role == "user" else "HELENA"
-            lines.append(f"{role}: {turn.content}")
+            lines.append(f"{role}: {turn.text}")
         return "\n".join(lines)
 
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
