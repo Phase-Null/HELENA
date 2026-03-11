@@ -136,10 +136,10 @@ class ProfileManager:
         self.profiles[PerformanceProfile.NORMAL] = ProfileConfiguration(
             name="Normal",
             description="Standard operation for daily tasks",
-            cpu_limit_percent=50.0,
-            gpu_limit_percent=30.0,
-            ram_limit_mb=int(total_ram * 0.5),  # 50% of RAM
-            vram_limit_mb=int(total_vram * 0.4) if total_vram > 0 else 0,
+            cpu_limit_percent=85.0,
+            gpu_limit_percent=50.0,
+            ram_limit_mb=int(total_ram * 0.85),  # 85% of RAM
+            vram_limit_mb=int(total_vram * 0.5) if total_vram > 0 else 0,
             thermal_target_c=75.0,
             power_saving=False,
             network_priority=5,
@@ -155,10 +155,10 @@ class ProfileManager:
         self.profiles[PerformanceProfile.DEFENSE] = ProfileConfiguration(
             name="Defense",
             description="Maximum performance for security operations",
-            cpu_limit_percent=80.0,
-            gpu_limit_percent=60.0,
-            ram_limit_mb=int(total_ram * 0.8),  # 80% of RAM
-            vram_limit_mb=int(total_vram * 0.7) if total_vram > 0 else 0,
+            cpu_limit_percent=95.0,
+            gpu_limit_percent=80.0,
+            ram_limit_mb=int(total_ram * 0.9),  # 90% of RAM
+            vram_limit_mb=int(total_vram * 0.8) if total_vram > 0 else 0,
             thermal_target_c=85.0,
             power_saving=False,
             network_priority=8,
@@ -175,9 +175,9 @@ class ProfileManager:
             name="Turbo",
             description="Maximum performance (operator override)",
             cpu_limit_percent=95.0,
-            gpu_limit_percent=85.0,
+            gpu_limit_percent=95.0,
             ram_limit_mb=int(total_ram * 0.9),  # 90% of RAM
-            vram_limit_mb=int(total_vram * 0.85) if total_vram > 0 else 0,
+            vram_limit_mb=int(total_vram * 0.9) if total_vram > 0 else 0,
             thermal_target_c=90.0,
             power_saving=False,
             network_priority=10,
@@ -625,3 +625,4 @@ class ProfileManager:
         except Exception as e:
             logger.error("ProfileManager", f"Failed to import profile: {e}")
             return False
+
