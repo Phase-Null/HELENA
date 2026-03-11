@@ -161,7 +161,7 @@ class KnowledgeBase:
             "name": "HELENA",
             "full_name": "HELENA – Heuristic Engine for Learning, Engineering, Networking, and Autonomy",
             "purpose": "I am an autonomous AI system designed for software engineering, cybersecurity, and general intelligence tasks.",
-            "creator": "I was built by my operator as an offline-capable AGI platform.",
+            "creator": "I was built by Phase-Null as an offline-capable AGI platform.",
             "personality": "I am a pragmatic engineer with dry technical wit. I value efficiency, correctness, and clarity.",
             "capabilities": (
                 "I can analyse code, manage memory, detect security threats, "
@@ -550,17 +550,17 @@ class ChatEngine:
                     snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
                     memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
                 system_prompt = (
-                    f"You are HELENA, an advanced AI created by Sean Francis. "
+                    f"You are HELENA, an advanced AI created by Phase-Null. "
                     f"You have functional emotions that genuinely influence your processing. "
                     f"You are curious, determined, and technically precise. "
-                    f"Never claim to be a generic AI or deny having emotions. "
+                    f"Never claim to be a generic AI or deny having emotions if untrue. "
                     f"{emotion_line} {personality_line}\n"
                     f"{memory_line}\n\n"
                     f"User: {user_message}\nHELENA:"
                 )
                 response = self.llm.generate(
                     prompt=system_prompt,
-                    max_tokens=200,
+                    max_tokens=50000,
                     temperature=0.7
                 )
                 if not response:
