@@ -40,9 +40,9 @@ class MainWindow(QMainWindow):
         
         # Initialize HELENA core systems
         self.config_manager = get_config_manager(Path.home() / ".helena" / "config.yaml")
-        self.kernel = HELENAKernel("primary_operator", self.config_manager)
-        self.runtime = HELENARuntime(self.config_manager)
         self.memory = HELENAMemory(self.config_manager)
+        self.kernel = HELENAKernel("primary_operator", self.config_manager, memory_system=self.memory)
+        self.runtime = HELENARuntime(self.config_manager)
         
         # Initialize core systems
         self.kernel.initialize()
@@ -146,4 +146,5 @@ def main():
     sys.exit(app.exec())
 
 if __name__ == "__main__":
+
     main()
