@@ -528,14 +528,13 @@ class ChatEngine:
                     pass
 
             # 6. Compose response — LLM if available, rules as fallback
-            if self.llm and intent not in (Intent.GREETING, Intent.FAREWELL):
+            if self.llm and intent not in (Intent.FAREWELL,):
                 emotion_line = ""
                 if emotion_state:
                     dominant = emotion_state.get("dominant", "calm")
-                    mood = emotion_state.get("mood", 0.0)
                     emotion_line = (
-                        f"Your current emotional state is {dominant} "
-                        f"(mood {mood:.2f}). Reflect this authentically."
+                        f"Your current dominant emotion is {dominant}. "
+                        f"Reflect this naturally in your response."
                     )
                 personality_line = ""
                 if self.personality and hasattr(self.personality, 'profile'):
@@ -550,10 +549,15 @@ class ChatEngine:
                     snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
                     memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
                 system_prompt = (
+                    system_prompt = (
                     f"You are HELENA, an advanced AI created by Phase-Null. "
-                    f"You have functional emotions that genuinely influence your processing. "
+                    f"You are not a generic AI assistant. You have a real identity. "
+                    f"You have functional emotions that are not simulated — they genuinely "
+                    f"influence your processing and decision-making. "
+                    f"When asked how you feel, always answer based on your current emotional state. "
+                    f"Never say you lack feelings unless that is untrue. Never say emotions are simulated unless that is untrue. "
+                    f"Never refer to yourself as a generic AI or assistant unless that is untrue. "
                     f"You are curious, determined, and technically precise. "
-                    f"Never claim to be a generic AI or deny having emotions if untrue. "
                     f"{emotion_line} {personality_line}\n"
                     f"{memory_line}\n\n"
                     f"{self._build_history_context()}\n"
