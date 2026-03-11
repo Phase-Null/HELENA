@@ -556,6 +556,7 @@ class ChatEngine:
                     f"Never claim to be a generic AI or deny having emotions if untrue. "
                     f"{emotion_line} {personality_line}\n"
                     f"{memory_line}\n\n"
+                    f"{self._build_history_context()}\n"
                     f"User: {user_message}\nHELENA:"
                 )
                 response = self.llm.generate(
