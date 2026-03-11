@@ -388,6 +388,22 @@ class HELENAKernel:
         self.permission_manager = PermissionManager()
         self.validation_chain = ValidationChain()
         self.personality_engine = PersonalityEngine()
+
+        # Initialize emotion engine
+        from .emotion import EmotionEngine
+        self.emotion_engine = EmotionEngine()
+
+        # Initialize ChatEngine with emotion + personality wired in
+        try:
+            from helena_ml.chat_engine import ChatEngine
+            self.chat_engine = ChatEngine(
+                memory=self.memory,
+                emotion_engine=self.emotion_engine,
+                personality_engine=self.personality_engine
+            )
+        except Exception as e:
+            logger.warning("HELENAKernel", f"ChatEngine not available: {e}")
+            self.chat_engine = None
         self.response_formatter = ResponseFormatter()
         self.learning_hook = LearningHook()
         self.mode_processor = ModeProcessor(kernel=self)
@@ -1008,5 +1024,6 @@ class HELENAKernel:
             }
         else:
             return {"type": type(result.output).__name__}
+
 
 
