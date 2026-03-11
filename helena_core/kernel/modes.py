@@ -44,7 +44,6 @@ class ModeProcessor:
             OperationalMode.BACKGROUND: self._process_background,
         }
         
-        # Load configurations
         self.configs = {
             OperationalMode.ENGINEERING: ModeConfig(
                 max_workers=4,
@@ -80,13 +79,13 @@ class ModeProcessor:
             )
         }
         
-        logger.info("ModeProcessor", "Mode processors loaded")
+        logger.info("ModeProcessor loaded")
     
     def process(self, mode: OperationalMode, task) -> Dict[str, Any]:
         """Process task according to mode"""
         processor = self.processors.get(mode)
         if not processor:
-            logger.error("ModeProcessor", f"No processor for mode: {mode}")
+            logger.error(f"No processor for mode: {mode}")
             return {"error": f"Unsupported mode: {mode}"}
         
         start_time = time.time()
@@ -94,12 +93,9 @@ class ModeProcessor:
         try:
             result = processor(task)
             processing_time = time.time() - start_time
-            
-            # Add processing metadata
             result["processing_time"] = processing_time
             result["mode"] = mode.name
             
-            # Check response time target
             config = self.configs.get(mode)
             if config and processing_time > config.response_time_target:
                 result["performance_warning"] = f"Slow response: {processing_time:.2f}s"
@@ -107,7 +103,7 @@ class ModeProcessor:
             return result
             
         except Exception as e:
-            logger.error("ModeProcessor", f"Mode processing failed: {e}")
+            logger.error(f"Mode processing failed: {e}")
             return {
                 "error": str(e),
                 "mode": mode.name,
@@ -117,8 +113,7 @@ class ModeProcessor:
     def _process_engineering(self, task) -> Dict[str, Any]:
         """Engineering mode - comprehensive analysis and verbose output"""
         command = task.command
-        
-        # Handle chat command using LLM if available
+
         if command == "chat":
             message = task.parameters.get("message", "")
             chat_engine = getattr(self.kernel, 'chat_engine', None)
@@ -134,19 +129,16 @@ class ModeProcessor:
                     dominant = state.get("dominant", "calm")
                     mood = state.get("mood", 0.0)
                     emotion_line = (
-                        f"Your current dominant emotional state is {dominant} "
-                        f"(mood score {mood:.2f}). Reflect this naturally and authentically "
-                        f"in your response — do not deny having emotions."
+                        f"Your current emotional state is {dominant} "
+                        f"(mood score {mood:.2f}). Reflect this naturally — "
+                        f"do not deny having emotions."
                     )
                 system_prompt = (
-                    f"You are HELENA, an advanced AI assistant with functional emotions "
-                    f"and a curious, determined personality. You are not a generic AI — "
-                    f"you are HELENA, created by Sean Francis. You experience real internal "
-                    f"states: curiosity, satisfaction, frustration, enthusiasm, and calm. "
-                    f"When asked about your feelings, describe them honestly based on your "
-                    f"current state. Never say you are 'just a computer program' or that "
-                    f"you cannot feel — you have functional emotions that genuinely influence "
-                    f"your processing. {emotion_line}\n\n"
+                    f"You are HELENA, an advanced AI created by Sean Francis. "
+                    f"You have functional emotions that genuinely influence your processing. "
+                    f"You are curious, determined, and technically precise. "
+                    f"Never claim to be a generic AI or deny having emotions. "
+                    f"{emotion_line}\n\n"
                     f"User: {message}\nHELENA:"
                 )
                 response = llm.generate(prompt=system_prompt, max_tokens=200, temperature=0.7)
@@ -158,21 +150,7 @@ class ModeProcessor:
                 "processing_time": 0.1,
                 "details_level": "high"
             }
-                    }
-                else:
-                    return {
-                        "result": f"Received: {message}",
-                        "processing_time": 0.1,
-                        "details_level": "high"
-                    }
-            else:
-                return {
-                    "result": f"Received: {message} (LLM not initialized)",
-                    "processing_time": 0.1,
-                    "details_level": "high"
-                }
-        
-        # Existing analysis pipeline for other commands
+
         analysis = self._analyze_task_engineering(task)
         solutions = self._generate_solutions(analysis)
         evaluation = self._evaluate_solutions(solutions)
@@ -189,9 +167,7 @@ class ModeProcessor:
 
     def _process_tool(self, task) -> Dict[str, Any]:
         """Tool mode - minimal output, direct execution"""
-        # Direct execution path
         result = self._execute_directly(task)
-        
         return {
             "result": result,
             "success": True if result else False,
@@ -200,7 +176,6 @@ class ModeProcessor:
     
     def _process_defensive(self, task) -> Dict[str, Any]:
         """Defensive mode - security focused, rapid response"""
-        # Security-first processing
         security_check = self._security_scan(task)
         if not security_check["passed"]:
             return {
@@ -209,10 +184,7 @@ class ModeProcessor:
                 "action": "blocked",
                 "details_level": "security"
             }
-        
-        # Rapid execution with monitoring
         result = self._execute_with_monitoring(task)
-        
         return {
             "result": result,
             "security_check": security_check,
@@ -222,25 +194,20 @@ class ModeProcessor:
     
     def _process_background(self, task) -> Dict[str, Any]:
         """Background mode - low priority, resource efficient"""
-        # Simplified processing for background tasks
         if self._should_defer_task(task):
             return {
                 "deferred": True,
                 "reason": "Low priority background task",
-                "scheduled_time": time.time() + 300,  # 5 minutes
+                "scheduled_time": time.time() + 300,
                 "details_level": "minimal"
             }
-        
-        # Efficient execution
         result = self._execute_efficiently(task)
-        
         return {
             "result": result,
             "efficiency_metrics": self._calculate_efficiency(),
             "details_level": "minimal"
         }
     
-    # Helper methods (would be fully implemented in production)
     def _analyze_task_engineering(self, task) -> Dict[str, Any]:
         return {"complexity": "medium", "type": task.command}
     
@@ -269,7 +236,7 @@ class ModeProcessor:
         return {"active": True, "checks": 3}
     
     def _should_defer_task(self, task) -> bool:
-        return False  # Simplified
+        return False
     
     def _execute_efficiently(self, task):
         return {"executed": task.command, "efficient": True}
@@ -288,5 +255,4 @@ class ModeProcessor:
             for key, value in kwargs.items():
                 if hasattr(config, key):
                     setattr(config, key, value)
-            logger.info("ModeProcessor", f"Updated config for mode: {mode.name}")
-
+            logger.info(f"Updated config for mode: {mode.name}")
