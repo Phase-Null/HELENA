@@ -141,7 +141,7 @@ class ModeProcessor:
                     f"{emotion_line}\n\n"
                     f"User: {message}\nHELENA:"
                 )
-                response = llm.generate(prompt=system_prompt, max_tokens=200, temperature=0.7)
+                response = llm.generate(prompt=system_prompt, max_tokens=50000, temperature=0.7)
             else:
                 response = None
 
@@ -256,3 +256,4 @@ class ModeProcessor:
                 if hasattr(config, key):
                     setattr(config, key, value)
             logger.info(f"Updated config for mode: {mode.name}")
+
