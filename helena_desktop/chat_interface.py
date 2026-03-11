@@ -33,7 +33,11 @@ class ChatWorker(QThread):
                 # Extract the actual output from the nested result
                 task_result = result.get("result", {})
                 if isinstance(task_result, dict):
-                    output = task_result.get("result") or task_result.get("output") or str(task_result)
+                    output = (task_result.get("result", {}).get("summary")
+                           or task_result.get("summary")
+                           or task_result.get("result")
+                           or task_result.get("output")
+                           or str(task_result))
                 else:
                     output = str(task_result)
                 self.response_ready.emit({"output": output})
@@ -102,3 +106,4 @@ class ChatInterface(QWidget):
         else:
 
             self.display.append(f"<b>HELENA:</b> (no response)")
+
