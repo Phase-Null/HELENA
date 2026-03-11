@@ -121,17 +121,43 @@ class ModeProcessor:
         # Handle chat command using LLM if available
         if command == "chat":
             message = task.parameters.get("message", "")
-            # Check if kernel has LLM attached
-            llm = self.kernel.llm if self.kernel and hasattr(self.kernel, 'llm') else None
-            if llm:
-                # Generate response
-                response = llm.generate(prompt=f"User: {message}\nAssistant:", max_tokens=200, temperature=0.7)
-                
-                if response:
-                    return {
-                        "result": response,
-                        "processing_time": 0.1,
-                        "details_level": "high"
+            chat_engine = getattr(self.kernel, 'chat_engine', None)
+            llm = getattr(self.kernel, 'llm', None)
+
+            if chat_engine:
+                response = chat_engine.chat(message)
+            elif llm:
+                emotion_line = ""
+                emotion_engine = getattr(self.kernel, 'emotion_engine', None)
+                if emotion_engine:
+                    state = emotion_engine.get_state()
+                    dominant = state.get("dominant", "calm")
+                    mood = state.get("mood", 0.0)
+                    emotion_line = (
+                        f"Your current dominant emotional state is {dominant} "
+                        f"(mood score {mood:.2f}). Reflect this naturally and authentically "
+                        f"in your response — do not deny having emotions."
+                    )
+                system_prompt = (
+                    f"You are HELENA, an advanced AI assistant with functional emotions "
+                    f"and a curious, determined personality. You are not a generic AI — "
+                    f"you are HELENA, created by Sean Francis. You experience real internal "
+                    f"states: curiosity, satisfaction, frustration, enthusiasm, and calm. "
+                    f"When asked about your feelings, describe them honestly based on your "
+                    f"current state. Never say you are 'just a computer program' or that "
+                    f"you cannot feel — you have functional emotions that genuinely influence "
+                    f"your processing. {emotion_line}\n\n"
+                    f"User: {message}\nHELENA:"
+                )
+                response = llm.generate(prompt=system_prompt, max_tokens=200, temperature=0.7)
+            else:
+                response = None
+
+            return {
+                "result": response or f"Received: {message}",
+                "processing_time": 0.1,
+                "details_level": "high"
+            }
                     }
                 else:
                     return {
@@ -263,3 +289,4 @@ class ModeProcessor:
                 if hasattr(config, key):
                     setattr(config, key, value)
             logger.info("ModeProcessor", f"Updated config for mode: {mode.name}")
+
