@@ -727,9 +727,9 @@ class ResponseFormatter:
         if "result" in content:
             result = content["result"]
             if isinstance(result, str):
-                return result[:200] + ("..." if len(result) > 200 else "")
+                return result
             else:
-                return str(result)[:200] + ("..." if len(str(result)) > 200 else "")
+                return str(result)
         
         if "recommendation" in content:
             rec = content["recommendation"]
@@ -737,5 +737,6 @@ class ResponseFormatter:
                 return f"Recommendation: {rec['action']}"
         
         return "Task executed successfully"
+
 
 
