@@ -592,6 +592,17 @@ class ChatEngine:
 
             return response
 
+    def _build_history_context(self, max_turns: int = 6) -> str:
+        """Build conversation history string for LLM context"""
+        if not self._history:
+            return ""
+        recent = self._history[-max_turns:]
+        lines = []
+        for turn in recent:
+            role = "User" if turn.role == "user" else "HELENA"
+            lines.append(f"{role}: {turn.content}")
+        return "\n".join(lines)
+
     def get_history(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Return recent conversation history."""
         with self._lock:
