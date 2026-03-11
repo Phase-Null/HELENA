@@ -31,18 +31,20 @@ class ChatWorker(QThread):
             if result and result.get("status") == "completed":
                 task_result = result.get("result", {})
                 if isinstance(task_result, dict):
-                    inner = task_result.get("result", {})
-                    if isinstance(inner, dict) and inner.get("summary"):
-                        output = inner.get("summary")
+                    # Try output.summary first (main path)
+                    output = task_result.get("output", {})
+                    if isinstance(output, dict) and output.get("summary"):
+                        response = output.get("summary")
+                    # Fallback paths
                     elif task_result.get("summary"):
-                        output = task_result.get("summary")
-                    elif isinstance(inner, str) and inner:
-                        output = inner
+                        response = task_result.get("summary")
+                    elif isinstance(task_result.get("result"), str):
+                        response = task_result.get("result")
                     else:
-                        output = str(task_result)
+                        response = str(task_result)
                 else:
-                    output = str(task_result)
-                self.response_ready.emit({"output": output})
+                    response = str(task_result)
+                self.response_ready.emit({"output": response})
                 return
         
         self.response_ready.emit({"error": "Response timeout"})
@@ -103,4 +105,5 @@ class ChatInterface(QWidget):
                 self.display.append(f"<b>HELENA:</b> (no response)")
         else:
             self.display.append(f"<b>HELENA:</b> (no response)")
+
 
