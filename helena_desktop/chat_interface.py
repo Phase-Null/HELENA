@@ -24,26 +24,23 @@ class ChatWorker(QThread):
             source="operator",
             priority=TaskPriority.NORMAL
         )
-        # Wait for result - should be fast now with simple fallback
         max_attempts = 300  # 300 * 0.1s = 30 seconds max
         for attempt in range(max_attempts):
             time.sleep(0.1)
             result = self.kernel.get_task_status(task_id)
             if result and result.get("status") == "completed":
-                # Extract the actual output from the nested result
                 task_result = result.get("result", {})
                 if isinstance(task_result, dict):
                     output = (task_result.get("result", {}).get("summary")
-                           or task_result.get("summary")
-                           or task_result.get("result")
-                           or task_result.get("output")
-                           or str(task_result))
+                              or task_result.get("summary")
+                              or task_result.get("result")
+                              or task_result.get("output")
+                              or str(task_result))
                 else:
                     output = str(task_result)
                 self.response_ready.emit({"output": output})
                 return
         
-        # Timeout (shouldn't happen with fallback)
         self.response_ready.emit({"error": "Response timeout"})
 
 class ChatInterface(QWidget):
@@ -72,7 +69,6 @@ class ChatInterface(QWidget):
         
         layout.addLayout(input_layout)
         
-        # Worker thread
         self.worker = None
     
     def send_message(self):
@@ -83,11 +79,9 @@ class ChatInterface(QWidget):
         self.display.append(f"<b>You:</b> {msg}")
         self.input_field.clear()
         
-        # Disable input while processing
         self.input_field.setEnabled(False)
         self.send_btn.setEnabled(False)
         
-        # Start background worker
         self.worker = ChatWorker(self.kernel, msg)
         self.worker.response_ready.connect(self.handle_response)
         self.worker.start()
@@ -104,6 +98,4 @@ class ChatInterface(QWidget):
             else:
                 self.display.append(f"<b>HELENA:</b> (no response)")
         else:
-
             self.display.append(f"<b>HELENA:</b> (no response)")
-
