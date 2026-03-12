@@ -33,11 +33,41 @@ class OllamaLLM:
                 requests.exceptions.RequestException):
             return False
     
-    def generate(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7) -> str:
-        """Generate using Ollama service - fast and non-blocking."""
+    def chat(self, messages: List[Dict[str, str]], max_tokens: int = 50000, temperature: float = 0.7) -> Optional[str]:
+        """Generate using Ollama /api/chat endpoint with proper message list."""
         if not self.available:
             return None
-        
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/chat",
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "stream": False,
+                    "options": {
+                        "temperature": temperature,
+                        "num_predict": max_tokens,
+                    }
+                },
+                timeout=120
+            )
+            if response.status_code == 200:
+                result = response.json()
+                return result.get("message", {}).get("content", "").strip()
+            else:
+                logger.error("LLM", f"Ollama chat error: {response.status_code}")
+                return None
+        except requests.exceptions.Timeout:
+            logger.error("LLM", "Ollama chat request timeout")
+            return None
+        except Exception as e:
+            logger.error("LLM", f"Ollama chat error: {e}")
+            return None
+
+    def generate(self, prompt: str, max_tokens: int = 50000, temperature: float = 0.7) -> Optional[str]:
+        """Generate using Ollama /api/generate - fallback for flat prompts."""
+        if not self.available:
+            return None
         try:
             response = requests.post(
                 f"{self.base_url}/api/generate",
@@ -50,7 +80,7 @@ class OllamaLLM:
                         "num_predict": max_tokens,
                     }
                 },
-                timeout=30
+                timeout=120
             )
             if response.status_code == 200:
                 result = response.json()
@@ -74,7 +104,6 @@ class LocalLLM:
         self.loading = False
         
         if self.model_path:
-            # Load model eagerly at startup (blocking, but worth it for GPU acceleration)
             self._load_model()
         else:
             logger.warning("LLM", "No GGUF model found.")
@@ -94,25 +123,23 @@ class LocalLLM:
         try:
             from llama_cpp import Llama
             logger.info("LLM", f"Loading GGUF model with GPU acceleration: {self.model_path}")
-            
             self.model = Llama(
                 model_path=self.model_path,
-                n_ctx=1024,            # Context window
-                n_threads=2,           # Reduced since GPU handles computation
-                n_gpu_layers=33,       # Load all/most layers on GPU (NVIDIA 4050)
+                n_ctx=1024,
+                n_threads=2,
+                n_gpu_layers=33,
                 verbose=False,
-                n_batch=512            # Batch size for GPU
+                n_batch=512
             )
             logger.info("LLM", "✓ GGUF model loaded successfully with GPU acceleration")
         except Exception as e:
             logger.error("LLM", f"Failed to load GGUF model: {e}")
             self.model = None
     
-    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> str:
-        """Generate using local GGUF model - fast with GPU acceleration."""
+    def generate(self, prompt: str, max_tokens: int = 128, temperature: float = 0.7) -> Optional[str]:
+        """Generate using local GGUF model."""
         if not self.model:
             return None
-        
         try:
             output = self.model(
                 prompt,
@@ -128,7 +155,7 @@ class LocalLLM:
             return None
 
 class SimpleFallbackLLM:
-    """Ultra-fast fallback LLM using simple pattern matching - instant responses."""
+    """Ultra-fast fallback LLM using simple pattern matching."""
     
     def __init__(self):
         self.responses = {
@@ -137,54 +164,50 @@ class SimpleFallbackLLM:
             "how are you": "I'm functioning well, thank you for asking!",
             "help": "I can assist with various tasks. What do you need?",
             "status": "All systems operational.",
-            "time": "I don't have real-time data, but I can help with other things.",
-            "what is": "I can explain many concepts. Be more specific?",
             "default": "I understand. How can I help further?"
         }
     
     def generate(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7) -> str:
         """Instant pattern-matched response."""
         prompt_lower = prompt.lower()
-        
-        # Check for keyword matches
         for key, response in self.responses.items():
             if key in prompt_lower:
                 return response
-        
-        # Default response
         return self.responses["default"]
 
 class HybridLLM:
-    """Hybrid LLM that tries Ollama first, then local GGUF with GPU, then simple fallback."""
+    """Hybrid LLM that tries Ollama first, then local GGUF, then simple fallback."""
     
     def __init__(self):
-        # Try Ollama first (fast service)
         self.ollama = OllamaLLM()
-        # Initialize local GGUF with GPU acceleration (eager loading at startup)
         self.local = LocalLLM()
-        # Ultra-fast fallback
         self.simple = SimpleFallbackLLM()
         
         if self.ollama.available:
             logger.info("LLM", "✓ Using Ollama (fastest)")
         elif self.local.model:
-            logger.info("LLM", "✓ Using GGUF with GPU acceleration (NVIDIA 4050)")
+            logger.info("LLM", "✓ Using GGUF with GPU acceleration")
         else:
             logger.info("LLM", "⚠ Using simple pattern-based fallback")
     
-    def generate(self, prompt: str, max_tokens: int = 256, temperature: float = 0.7) -> str:
-        """Generate response using the best available backend."""
-        # Try Ollama first if available
+    def chat(self, messages: List[Dict[str, str]], max_tokens: int = 50000, temperature: float = 0.7) -> Optional[str]:
+        """Generate response using structured message list (preferred)."""
+        if self.ollama.available:
+            result = self.ollama.chat(messages, max_tokens, temperature)
+            if result:
+                return result
+        # LocalLLM and SimpleFallback don't support chat format — fall through to generate
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        return self.generate(last_user, max_tokens, temperature)
+
+    def generate(self, prompt: str, max_tokens: int = 50000, temperature: float = 0.7) -> Optional[str]:
+        """Generate response using flat prompt string (fallback)."""
         if self.ollama.available:
             result = self.ollama.generate(prompt, max_tokens, temperature)
             if result:
                 return result
-        
-        # Try local GGUF with GPU (should be loaded and fast now)
         if self.local.model:
             result = self.local.generate(prompt, max_tokens, temperature)
             if result:
                 return result
-        
-        # Fall back to simple pattern matching (instant)
         return self.simple.generate(prompt, max_tokens, temperature)
