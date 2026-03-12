@@ -572,7 +572,7 @@ class ChatEngine:
 
                 # Build message list for /api/chat
                 messages = [{"role": "system", "content": system_content}]
-                for turn in self._history[-6:]:
+                for turn in self._history[-7:-1]:
                     role = "user" if turn.role == "user" else "assistant"
                     messages.append({"role": role, "content": turn.text})
                 messages.append({"role": "user", "content": user_message})
