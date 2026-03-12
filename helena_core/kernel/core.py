@@ -393,6 +393,14 @@ class HELENAKernel:
         from .emotion import EmotionEngine
         self.emotion_engine = EmotionEngine()
 
+         # Initialize LLM for chat
+        try:
+            from helena_ml.llm import HybridLLM
+            self.llm = HybridLLM()
+        except Exception as e:
+            logger.warning("HELENAKernel", f"Failed to initialize LLM: {e}")
+            self.llm = None
+            
         # Initialize ChatEngine with emotion + personality wired in
         try:
             from helena_ml.chat_engine import ChatEngine
@@ -408,14 +416,6 @@ class HELENAKernel:
         self.response_formatter = ResponseFormatter()
         self.learning_hook = LearningHook()
         self.mode_processor = ModeProcessor(kernel=self)
-        
-        # Initialize LLM for chat
-        try:
-            from helena_ml.llm import HybridLLM
-            self.llm = HybridLLM()
-        except Exception as e:
-            logger.warning("HELENAKernel", f"Failed to initialize LLM: {e}")
-            self.llm = None
         
         # Worker pool
         self.worker_pool = ThreadPoolExecutor(
@@ -1025,6 +1025,7 @@ class HELENAKernel:
             }
         else:
             return {"type": type(result.output).__name__}
+
 
 
 
