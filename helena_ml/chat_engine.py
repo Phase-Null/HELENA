@@ -563,7 +563,7 @@ class ChatEngine:
                     f"an emotion engine with 8 emotions that decay over time, "
                     f"a personality engine that controls verbosity and technical depth, "
                     f"a ChromaDB vector memory and graph memory for persistent storage, "
-                    f"and Mistral via Ollama as your language model. "
+                    f"and Mistral via Ollama as your current language model. "
                     f"You were built to evolve and learn through experience. "
                     f"{emotion_line} {personality_line}\n"
                     f"{memory_line}\n\n"
