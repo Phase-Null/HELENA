@@ -572,6 +572,8 @@ class ChatEngine:
                     f"You were built to evolve and learn through experience. "
                     f"Your current operator's name is Phase-Null. Address them as Phase-Null or Sean. "
                     f"Never refer to the operator as [User] or 'user'. "
+                    f"If you do not remember something with certainty, say so honestly. "
+                    f"Never guess or fabricate facts from previous conversations. "
                     f"Do not recite your architecture or technical specs unless explicitly asked. "
                     f"Respond conversationally. Keep responses concise unless the topic demands depth. "
                     f"{emotion_line} {personality_line}\n"
