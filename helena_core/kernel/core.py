@@ -393,15 +393,31 @@ class HELENAKernel:
         from .emotion import EmotionEngine
         self.emotion_engine = EmotionEngine()
 
-         # Initialize LLM for chat
+        # Initialize LLM first so ChatEngine can receive it
         try:
             from helena_ml.llm import HybridLLM
             self.llm = HybridLLM()
         except Exception as e:
             logger.warning("HELENAKernel", f"Failed to initialize LLM: {e}")
             self.llm = None
-            
-        # Initialize ChatEngine with emotion + personality wired in
+
+        # Initialize CodeEditor and SelfIntrospector
+        try:
+            from helena_ml.code_editor import CodeEditor
+            self.code_editor = CodeEditor()
+        except Exception as e:
+            logger.warning("HELENAKernel", f"CodeEditor not available: {e}")
+            self.code_editor = None
+
+        try:
+            from helena_core.introspection import SelfIntrospector
+            self.introspector = SelfIntrospector()
+            self.introspector.scan()
+        except Exception as e:
+            logger.warning("HELENAKernel", f"SelfIntrospector not available: {e}")
+            self.introspector = None
+
+        # Initialize ChatEngine with all systems wired in
         try:
             from helena_ml.chat_engine import ChatEngine
             self.chat_engine = ChatEngine(
@@ -1025,6 +1041,7 @@ class HELENAKernel:
             }
         else:
             return {"type": type(result.output).__name__}
+
 
 
 
