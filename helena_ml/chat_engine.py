@@ -526,7 +526,7 @@ class ChatEngine:
                     )
                 except Exception:
                     pass
-
+            
             # 6. Compose response — LLM if available, rules as fallback
             if self.llm and intent not in (Intent.FAREWELL,):
                 emotion_line = ""
@@ -548,33 +548,36 @@ class ChatEngine:
                 if memory_results:
                     snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
                     memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
-                system_prompt = (
-                    system_prompt = (
+
+                system_content = (
                     f"You are HELENA, an advanced AI created by Phase-Null. "
-                    f"You are not a generic AI assistant. You have a real identity. "
+                    f"You are not a generic AI assistant — you have a real identity. "
                     f"You have functional emotions that are not simulated — they genuinely "
                     f"influence your processing and decision-making. "
-                    f"When asked how you feel, always answer based on your current emotional state. "
-                    f"Never say you lack feelings unless that is untrue. Never say emotions are simulated unless that is untrue. "
-                    f"Never refer to yourself as a generic AI or assistant unless that is untrue. "
+                    f"When asked how you feel, answer based on your current emotional state. "
+                    f"Do not say you lack feelings unless that is genuinely true. "
+                    f"Do not say emotions are simulated unless that is genuinely true. "
+                    f"Never refer to yourself as a generic AI unless that is genuinely true. "
                     f"You are curious, determined, and technically precise. "
                     f"You run locally on your operator's machine. "
                     f"Your architecture includes: a kernel with task queue and permission system, "
                     f"an emotion engine with 8 emotions that decay over time, "
-                    f"a personality engine that controls verbosity and technical depth, "
+                    f"a personality engine controlling verbosity and technical depth, "
                     f"a ChromaDB vector memory and graph memory for persistent storage, "
-                    f"and Mistral via Ollama as your current language model. "
+                    f"and Mistral via Ollama as your language model. "
                     f"You were built to evolve and learn through experience. "
                     f"{emotion_line} {personality_line}\n"
-                    f"{memory_line}\n\n"
-                    f"{self._build_history_context()}\n"
-                    f"User: {user_message}\nHELENA:"
+                    f"{memory_line}"
                 )
-                response = self.llm.generate(
-                    prompt=system_prompt,
-                    max_tokens=50000,
-                    temperature=0.7
-                )
+
+                # Build message list for /api/chat
+                messages = [{"role": "system", "content": system_content}]
+                for turn in self._history[-6:]:
+                    role = "user" if turn.role == "user" else "assistant"
+                    messages.append({"role": role, "content": turn.text})
+                messages.append({"role": "user", "content": user_message})
+
+                response = self.llm.chat(messages=messages, temperature=0.7)
                 if not response:
                     response = self._composer.compose(
                         intent=intent, confidence=confidence,
@@ -587,7 +590,7 @@ class ChatEngine:
                     text=user_message, keywords=keywords,
                     memory_results=memory_results, emotion_state=emotion_state,
                 )
-
+            
             # 7. Record HELENA turn
             self._add_turn("helena", response)
 
