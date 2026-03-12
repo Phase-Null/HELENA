@@ -159,7 +159,7 @@ class KnowledgeBase:
     def __init__(self) -> None:
         self.self_knowledge: Dict[str, str] = {
             "name": "HELENA",
-            "full_name": "HELENA – Heuristic Engine for Learning, Engineering, Networking, and Autonomy",
+            "full_name": "HELENA – Hybrid Engine for Learning, Engineering, Networking, and Autonomy",
             "purpose": "I am an autonomous AI system designed for software engineering, cybersecurity, and general intelligence tasks.",
             "creator": "I was built by Phase-Null as an offline-capable AGI platform.",
             "personality": "I am a pragmatic engineer with dry technical wit. I value efficiency, correctness, and clarity.",
@@ -510,7 +510,7 @@ class ChatEngine:
             if self.memory and keywords:
                 try:
                     memory_results = self.memory.search(
-                        user_message, limit=5, threshold=0.2
+                        user_message, limit=5, threshold=0.8
                     )
                 except Exception:
                     pass
@@ -545,7 +545,7 @@ class ChatEngine:
                         f"Style: {p.response_style}."
                     )
                 memory_line = ""
-                if memory_results:
+                if memory_results and intent not in (Intent.GREETING, Intent.QUESTION):
                     snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
                     memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
 
@@ -573,7 +573,8 @@ class ChatEngine:
                     f"Your current operator's name is Phase-Null. Address them as Phase-Null or Sean. "
                     f"Never refer to the operator as [User] or 'user'. "
                     f"If you do not remember something with certainty, say so honestly. "
-                    f"Never guess or fabricate facts from previous conversations. "
+                    f"Never, under any circumstances, guess or fabricate facts from previous conversations. "
+                    f"If asked about a previous session, say honestly that your cross-session memory is limited and ask them to re-provide the information, unless you can propperly remember. "
                     f"Do not recite your architecture or technical specs unless explicitly asked. "
                     f"Respond conversationally. Keep responses concise unless the topic demands depth. "
                     f"{emotion_line} {personality_line}\n"
