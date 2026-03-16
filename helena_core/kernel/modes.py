@@ -122,26 +122,10 @@ class ModeProcessor:
             if chat_engine:
                 response = chat_engine.chat(message)
             elif llm:
-                emotion_line = ""
-                emotion_engine = getattr(self.kernel, 'emotion_engine', None)
-                if emotion_engine:
-                    state = emotion_engine.get_state()
-                    dominant = state.get("dominant", "calm")
-                    mood = state.get("mood", 0.0)
-                    emotion_line = (
-                        f"Your current emotional state is {dominant} "
-                        f"(mood score {mood:.2f}). Reflect this naturally — "
-                        f"do not deny having emotions."
-                    )
-                system_prompt = (
-                    f"You are HELENA, an advanced AI created by Sean Francis. "
-                    f"You have functional emotions that genuinely influence your processing. "
-                    f"You are curious, determined, and technically precise. "
-                    f"Never claim to be a generic AI or deny having emotions. "
-                    f"{emotion_line}\n\n"
-                    f"User: {message}\nHELENA:"
+                response = llm.generate(
+                    prompt=f"You are HELENA. User: {message}\nHELENA:",
+                    max_tokens=50000, temperature=0.7
                 )
-                response = llm.generate(prompt=system_prompt, max_tokens=50000, temperature=0.7)
             else:
                 response = None
 
@@ -150,6 +134,46 @@ class ModeProcessor:
                 "processing_time": 0.1,
                 "details_level": "high"
             }
+
+        if command == "code_read":
+            path = task.parameters.get("path", "")
+            code_editor = getattr(self.kernel, 'code_editor', None)
+            if not code_editor:
+                return {"result": "CodeEditor not available.", "processing_time": 0.0}
+            result = code_editor.read_file(path)
+            if result["ok"]:
+                return {"result": result["content"], "path": path, "lines": result["lines"], "processing_time": 0.0}
+            return {"result": f"Error: {result['error']}", "processing_time": 0.0}
+
+        if command == "code_write":
+            path = task.parameters.get("path", "")
+            content = task.parameters.get("content", "")
+            reason = task.parameters.get("reason", "")
+            code_editor = getattr(self.kernel, 'code_editor', None)
+            if not code_editor:
+                return {"result": "CodeEditor not available.", "processing_time": 0.0}
+            result = code_editor.write_file(path, content, reason=reason)
+            if result["ok"]:
+                return {"result": f"Written: {path} ({result['bytes_written']} bytes)", "processing_time": 0.0}
+            return {"result": f"Write failed: {result['error']}", "processing_time": 0.0}
+
+        if command == "code_search":
+            query = task.parameters.get("query", "")
+            subdir = task.parameters.get("subdir", "")
+            code_editor = getattr(self.kernel, 'code_editor', None)
+            if not code_editor:
+                return {"result": "CodeEditor not available.", "processing_time": 0.0}
+            result = code_editor.search_code(query, subdir=subdir)
+            lines = [f"{m['file']}:{m['line']} — {m['text']}" for m in result["matches"][:20]]
+            return {"result": "\n".join(lines) or "No matches found.", "processing_time": 0.0}
+
+        if command == "code_list":
+            subdir = task.parameters.get("subdir", "")
+            code_editor = getattr(self.kernel, 'code_editor', None)
+            if not code_editor:
+                return {"result": "CodeEditor not available.", "processing_time": 0.0}
+            result = code_editor.list_files(subdir=subdir)
+            return {"result": "\n".join(result["files"]), "processing_time": 0.0}
 
         analysis = self._analyze_task_engineering(task)
         solutions = self._generate_solutions(analysis)
@@ -256,4 +280,5 @@ class ModeProcessor:
                 if hasattr(config, key):
                     setattr(config, key, value)
             logger.info(f"Updated config for mode: {mode.name}")
+
 
