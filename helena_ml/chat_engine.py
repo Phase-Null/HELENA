@@ -474,11 +474,12 @@ class ChatEngine:
     """
 
     def __init__(self, memory=None, emotion_engine=None,
-                 personality_engine=None, llm=None) -> None:
+                 personality_engine=None, llm=None, code_editor=None) -> None:
         self.memory = memory
         self.emotion_engine = emotion_engine
         self.personality = personality_engine
         self.llm = llm
+        self._code_editor = code_editor
 
         self._classifier = IntentClassifier()
         self._knowledge = KnowledgeBase()
@@ -496,6 +497,13 @@ class ChatEngine:
     def chat(self, user_message: str) -> str:
         """Process a user message and return HELENA's response."""
         with self._lock:
+            # 0. Check if this message needs a code tool
+            tool_response = self._detect_tool_intent(user_message)
+            if tool_response is not None:
+                self._add_turn("user", user_message)
+                self._add_turn("helena", tool_response)
+                return tool_response
+
             # 1. Classify intent
             intent, confidence = self._classifier.classify(user_message)
 
@@ -617,6 +625,112 @@ class ChatEngine:
                     pass
 
             return response
+
+    def _detect_tool_intent(self, user_message: str) -> Optional[str]:
+        """
+        Ask the LLM if this message requires a code tool.
+        Returns a string response if a tool was used, None if normal chat should proceed.
+
+        This is HELENA's tool-use decision loop — the same pattern as OpenAI function calling.
+        Today this runs on Mistral. When HELENA has her own model, nothing here changes.
+        """
+        if not self.llm:
+            return None
+
+        # Quick pre-filter — if message has no code-related words, skip the LLM call entirely
+        code_keywords = (
+            "read", "file", "code", "write", "search", "list", "look at",
+            "show me", "open", "edit", "modify", "your source", "yourself"
+        )
+        msg_lower = user_message.lower()
+        if not any(kw in msg_lower for kw in code_keywords):
+            return None
+
+        # Ask the LLM to classify the intent as a tool call
+        decision_prompt = (
+            "You are a tool-use classifier for an AI system called HELENA. "
+            "HELENA has access to these tools:\n"
+            "  code_read   — read a specific source file (needs: path)\n"
+            "  code_write  — write content to a source file (needs: path, content, reason)\n"
+            "  code_search — search for a string across all source files (needs: query)\n"
+            "  code_list   — list all source files in a directory (needs: subdir, optional)\n"
+            "  none        — no tool needed, handle as normal conversation\n\n"
+            "Given the user message below, respond ONLY with a JSON object.\n"
+            "Examples:\n"
+            '  {"tool": "code_read", "path": "helena_ml/chat_engine.py"}\n'
+            '  {"tool": "code_search", "query": "def chat"}\n'
+            '  {"tool": "code_list", "subdir": "helena_ml"}\n'
+            '  {"tool": "none"}\n\n'
+            f'User message: "{user_message}"\n'
+            "JSON:"
+        )
+
+        try:
+            raw = self.llm.chat(
+                messages=[{"role": "user", "content": decision_prompt}],
+                temperature=0.0  # deterministic — this is classification not generation
+            )
+            if not raw:
+                return None
+
+            # Strip markdown fences if Mistral wraps the JSON
+            cleaned = raw.strip().strip("```json").strip("```").strip()
+            import json
+            decision = json.loads(cleaned)
+            tool = decision.get("tool", "none")
+
+            if tool == "none" or not tool:
+                return None
+
+            # Route to the appropriate CodeEditor method
+            if not hasattr(self, '_code_editor'):
+                # Lazily grab code_editor from kernel if available
+                # chat_engine doesn't hold a direct ref — we go via a stored kernel ref
+                return None
+
+            ce = self._code_editor
+
+            if tool == "code_read":
+                path = decision.get("path", "")
+                if not path:
+                    return "I'd need a file path to read. Which file did you have in mind?"
+                result = ce.read_file(path)
+                if result["ok"]:
+                    # Don't dump the whole file into chat — summarise
+                    lines = result["content"].splitlines()
+                    preview = "\n".join(lines[:40])
+                    return (
+                        f"Here are the first {min(40, len(lines))} lines of `{path}` "
+                        f"({result['lines']} lines total):\n\n```python\n{preview}\n```"
+                    )
+                return f"I couldn't read that file: {result['error']}"
+
+            if tool == "code_search":
+                query = decision.get("query", "")
+                result = ce.search_code(query)
+                if not result["ok"] or not result["matches"]:
+                    return f"No matches found for `{query}`."
+                lines = [f"`{m['file']}` line {m['line']}: {m['text']}" for m in result["matches"][:15]]
+                return f"Found {result['count']} match(es) for `{query}`:\n\n" + "\n".join(lines)
+
+            if tool == "code_list":
+                subdir = decision.get("subdir", "")
+                result = ce.list_files(subdir=subdir)
+                return f"Files in `{subdir or 'project root'}`:\n\n" + "\n".join(result["files"])
+
+            if tool == "code_write":
+                # Write is intentionally not auto-executed from conversation for safety
+                path = decision.get("path", "")
+                return (
+                    f"I can write to `{path}`, but I won't do that automatically from chat. "
+                    f"Ask Phase-Null to confirm and I'll proceed."
+                )
+
+        except Exception as e:
+            # If anything goes wrong, fall through to normal chat
+            return None
+
+        return None
 
     def _build_history_context(self, max_turns: int = 6) -> str:
         """Build conversation history string for LLM context"""
