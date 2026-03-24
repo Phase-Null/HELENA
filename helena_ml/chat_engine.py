@@ -647,6 +647,11 @@ class ChatEngine:
         if not any(kw in msg_lower for kw in code_keywords):
             return None
 
+        # Direct shortcuts — no need to ask the LLM for these
+        if any(p in msg_lower for p in ("list your files", "list your source", "list source files", "list all files", "list files")):
+            result = self._code_editor.list_files()
+            return "Here are my source files:\n\n" + "\n".join(result["files"])
+
         # Ask the LLM to classify the intent as a tool call
         decision_prompt = (
             "You are a tool-use classifier for an AI system called HELENA. "
