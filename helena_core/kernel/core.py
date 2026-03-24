@@ -425,6 +425,7 @@ class HELENAKernel:
                 emotion_engine=self.emotion_engine,
                 personality_engine=self.personality_engine,
                 llm=self.llm
+                code_editor=self.code_editor
             )
         except Exception as e:
             logger.warning("HELENAKernel", f"ChatEngine not available: {e}")
