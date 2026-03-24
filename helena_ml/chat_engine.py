@@ -640,7 +640,8 @@ class ChatEngine:
         # Quick pre-filter — if message has no code-related words, skip the LLM call entirely
         code_keywords = (
             "read", "file", "code", "write", "search", "list", "look at",
-            "show me", "open", "edit", "modify", "your source", "yourself"
+            "show me", "open", "edit", "modify", "your source", "yourself",
+            "source", "files", "directory", "folder", "script", "module"
         )
         msg_lower = user_message.lower()
         if not any(kw in msg_lower for kw in code_keywords):
@@ -692,8 +693,9 @@ class ChatEngine:
 
             if tool == "code_read":
                 path = decision.get("path", "")
-                if not path:
-                    return "I'd need a file path to read. Which file did you have in mind?"
+                if not path or not (self._code_editor.root / path).exists():
+                    result = ce.list_files()
+                    return "I'm not sure which file you meant. Here's what I have:\n\n" + "\n".join(result["files"])
                 result = ce.read_file(path)
                 if result["ok"]:
                     # Don't dump the whole file into chat — summarise
