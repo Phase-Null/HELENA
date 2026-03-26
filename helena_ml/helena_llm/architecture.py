@@ -219,7 +219,7 @@ class SSMLayer(nn.Module):
         ys = []
         for t in range(seq):
             h = dA[:, t] * h + dB[:, t] * x_conv[:, t].unsqueeze(-1)
-            y_t = (h * C[:, t].unsqueeze(2)).sum(dim=-1)  # [B, d_inner]
+            y_t = (h * C[:, t].unsqueeze(1)).sum(dim=-1)  # [B, d_inner]
             ys.append(y_t)
  
         y = torch.stack(ys, dim=1)  # [B, L, d_inner]
