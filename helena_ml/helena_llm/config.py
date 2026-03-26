@@ -52,12 +52,12 @@ class HelenaNetConfig:
     d_expert: int = 2048            # Expert FFN hidden dimension
  
     # Training
-    max_seq_len: int = 2048
+    max_seq_len: int = 256
     dropout: float = 0.1
     learning_rate: float = 3e-4
     weight_decay: float = 0.01
     warmup_steps: int = 500
-    max_steps: int = 10000
+    max_steps: int = 100
     batch_size: int = 8
     grad_clip: float = 1.0
  
