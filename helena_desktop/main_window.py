@@ -131,6 +131,11 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
+            # # Save memory before shutdown
+            try:
+                self.memory.save()
+            except Exception:
+                pass
             # Shutdown core systems
             self.kernel.shutdown()
             self.runtime.shutdown()
