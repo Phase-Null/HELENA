@@ -56,7 +56,7 @@ class HelenaNetConfig:
     dropout: float = 0.1
     learning_rate: float = 3e-4
     weight_decay: float = 0.01
-    warmup_steps: int = 500
+    warmup_steps: int = 5
     max_steps: int = 100
     batch_size: int = 8
     grad_clip: float = 1.0
@@ -101,7 +101,7 @@ class HelenaNetConfig:
 HELENA_NANO = HelenaNetConfig(
     d_model=256, d_state=32, d_inner=512, n_layers=6,
     n_experts=4, n_experts_active=1, d_expert=1024,
-    vocab_size=8192, max_seq_len=1024,
+    vocab_size=8192, max_seq_len=256,
 )
  
 # Standard config — balanced
