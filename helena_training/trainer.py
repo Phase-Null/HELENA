@@ -3,6 +3,7 @@ AutonomousTrainer – main orchestrator with real improvement flow.
 """
 import time
 import threading
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -28,7 +29,13 @@ class AutonomousTrainer:
         self.kernel = kernel
         self.runtime = runtime
         self.memory = memory
-        self.config = config_manager.get_section("training") or {}
+        training_config = config_manager.get_section("training")
+        if isinstance(training_config, dict):
+            self.config = training_config
+        elif is_dataclass(training_config):
+            self.config = asdict(training_config)
+        else:
+            self.config = vars(training_config) if training_config is not None else {}
 
         # Subcomponents
         self.dataset = TrainingDataset(
@@ -101,22 +108,29 @@ class AutonomousTrainer:
 
             # 6. Test each in sandbox
             valid_patches = []
+            patch_test_results = {}
             for patch in safe_proposals:
                 test_result = self.sandbox.test_patch(patch)
+                patch_test_results[patch.get("id", str(id(patch)))] = test_result
                 self.evolution.record_patch(patch, test_result, applied=False)
                 if test_result['passed']:
                     valid_patches.append(patch)
 
             # 7. Integrate successful patches
             for patch in valid_patches:
-                perf_before = test_result.get('performance_before', {})
+                perf_before = None
+                perf_after = None
+                patch_test_result = patch_test_results.get(patch.get("id", str(id(patch))), {})
+                if patch_test_result.get('passed'):
+                    perf_before = patch_test_result.get('performance_before', {}).get('response_time_ms')
+                    perf_after = patch_test_result.get('performance_after', {}).get('response_time_ms')
                 if self.integration.apply_patch(patch):
                     # After integration, we would reload modules (requires restart)
                     # For now, just log.
                     self.improvement_log.record(patch)
                     self.evolution.record_patch(patch, {'passed': True}, applied=True,
-                                                perf_before=perf_before.get('response_time_ms'),
-                                                perf_after=test_result.get('performance_after', {}).get('response_time_ms'))
+                                                perf_before=perf_before,
+                                                perf_after=perf_after)
                     logger.info("AutonomousTrainer", f"Applied patch: {patch['id']}")
 
             self.last_session_time = time.time()
@@ -132,7 +146,7 @@ class AutonomousTrainer:
     def _collect_data(self, focus_areas):
         data = {
             'timestamp': time.time(),
-            'focus_areas': focus_areas or getattr(self.config, 'focus_areas', []),
+            'focus_areas': focus_areas or self.config.get('focus_areas', []),
             'sources': {}
         }
         if hasattr(self.kernel, 'learning_hook'):

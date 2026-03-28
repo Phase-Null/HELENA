@@ -33,9 +33,20 @@ from .gaming import (
     GamingSession,
     GamingDetectionMethod
 )
+from typing import Any
+
 from ..utils.logging import get_logger
 
 logger = get_logger()
+
+
+def _cfg_get(config: Any, key: str, default: Any = None) -> Any:
+    """Read a value from a dict-like or object-like config."""
+    if config is None:
+        return default
+    if isinstance(config, dict):
+        return config.get(key, default)
+    return getattr(config, key, default)
 
 __all__ = [
     # Hardware
@@ -102,8 +113,12 @@ class HELENARuntime:
             
             # Configure profile manager
             if perf_config:
-               self.profile_manager.auto_switch_enabled = perf_config.auto_throttle
-               self.gaming_optimizer.auto_optimize = perf_config.gaming_mode_auto
+               self.profile_manager.auto_switch_enabled = bool(
+                   _cfg_get(perf_config, "auto_throttle", True)
+               )
+               self.gaming_optimizer.auto_optimize = bool(
+                   _cfg_get(perf_config, "gaming_mode_auto", True)
+               )
                 
             logger.debug("HELENARuntime", "Runtime configuration loaded")
             
@@ -190,7 +205,7 @@ class HELENARuntime:
             logger.error("HELENARuntime", f"Unknown profile: {profile_name}")
             return False
     
-    def get_current_profile(self) -> dict[str, any]:
+    def get_current_profile(self) -> dict[str, Any]:
         """Get current profile information"""
         profile = self.profile_manager.get_current_profile()
         if not profile:
@@ -212,7 +227,7 @@ class HELENARuntime:
             }
         }
     
-    def get_system_status(self) -> dict[str, any]:
+    def get_system_status(self) -> dict[str, Any]:
         """Get complete system status"""
         usage = self.resource_manager.get_system_usage()
         
@@ -241,7 +256,7 @@ class HELENARuntime:
     
     def get_resource_history(self, 
                            hours: int = 1,
-                           resource_type: str = "cpu") -> list[dict[str, any]]:
+                           resource_type: str = "cpu") -> list[dict[str, Any]]:
         """Get resource usage history"""
         try:
             from .resources import ResourceType
@@ -255,7 +270,7 @@ class HELENARuntime:
             logger.error("HELENARuntime", f"Unknown resource type: {resource_type}")
             return []
     
-    def set_resource_limits(self, limits: list[dict[str, any]]) -> bool:
+    def set_resource_limits(self, limits: list[dict[str, Any]]) -> bool:
         """Set custom resource limits"""
         try:
             from .resources import ResourceLimit, ResourceType
@@ -281,7 +296,7 @@ class HELENARuntime:
     
     def create_custom_profile(self, 
                             name: str,
-                            configuration: dict[str, any]) -> bool:
+                            configuration: dict[str, Any]) -> bool:
         """Create a custom performance profile"""
         try:
             from .profiles import ProfileConfiguration
@@ -331,7 +346,7 @@ class HELENARuntime:
             logger.error("HELENARuntime", f"Runtime shutdown failed: {e}")
             return False
     
-    def emergency_throttle(self) -> dict[str, any]:
+    def emergency_throttle(self) -> dict[str, Any]:
         """Emergency throttle - maximum resource reduction"""
         # Switch to IDLE profile
         self.switch_profile("IDLE")

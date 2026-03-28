@@ -14,6 +14,7 @@ import math
 import re
 import time
 import logging
+from dataclasses import asdict, is_dataclass
 from typing import Dict, List, Any, Optional
 
 from .vector_store import (
@@ -76,10 +77,19 @@ class HELENAMemory:
 
     def __init__(self, config_manager) -> None:
         self.config = config_manager
-        mem_cfg = config_manager.get_section("memory") or {}
-        dim = mem_cfg.get("vector_dimension", 384) if isinstance(mem_cfg, dict) else 384
+        mem_cfg = config_manager.get_section("memory")
+        if mem_cfg is None:
+            mem_cfg_dict = {}
+        elif isinstance(mem_cfg, dict):
+            mem_cfg_dict = mem_cfg
+        elif is_dataclass(mem_cfg):
+            mem_cfg_dict = asdict(mem_cfg)
+        else:
+            # Fallback for object-like sections
+            mem_cfg_dict = vars(mem_cfg)
 
-        storage_root = mem_cfg.get("storage_path", "./helena_memory") if isinstance(mem_cfg, dict) else "./helena_memory"
+        dim = int(mem_cfg_dict.get("vector_dimension", 384))
+        storage_root = mem_cfg_dict.get("storage_path", "./helena_memory")
 
         # Embedder
         self._embedder = _OfflineEmbedder(dimension=dim)

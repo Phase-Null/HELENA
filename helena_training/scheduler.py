@@ -9,6 +9,7 @@ constrained.
 import time
 import threading
 import logging
+from dataclasses import asdict, is_dataclass
 from typing import Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,13 @@ class TrainingScheduler:
 
     def __init__(self, trainer, config: Dict[str, Any]):
         self.trainer = trainer
-        self.config = config if isinstance(config, dict) else {}
+        if isinstance(config, dict):
+            self.config = config
+        elif is_dataclass(config):
+            self.config = asdict(config)
+        else:
+            # Fallback to object attributes when a dataclass isn't used.
+            self.config = vars(config) if config is not None else {}
 
         # Scheduling parameters (seconds)
         self.interval: float = float(self.config.get("schedule_interval", 3600))

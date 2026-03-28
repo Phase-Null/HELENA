@@ -8,7 +8,7 @@ import json
 import gzip
 import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 from enum import Enum
 import struct
@@ -44,7 +44,7 @@ class StructuredLogRecord:
                  source: str,
                  context: Optional[Dict[str, Any]] = None,
                  timestamp: Optional[datetime] = None):
-        self.timestamp = timestamp or datetime.utcnow()
+        self.timestamp = timestamp or datetime.now(timezone.utc)
         self.message = message
         self.log_type = log_type
         self.level = level
@@ -99,8 +99,11 @@ class EncryptedRotatingFileHandler(logging.handlers.RotatingFileHandler):
         
         self.encryption_key = encryption_key
         if encryption_key:
-            fernet_key = base64.urlsafe_b64encode(encryption_key)
-            self.fernet = Fernet(fernet_key)
+            try:
+                fernet_key = base64.urlsafe_b64encode(encryption_key)
+                self.fernet = Fernet(fernet_key)
+            except Exception:
+                self.fernet = Fernet(encryption_key)
         else:
             self.fernet = None
         
@@ -130,7 +133,7 @@ class EncryptedRotatingFileHandler(logging.handlers.RotatingFileHandler):
             else:
                 # Fallback to simple format
                 log_entry = {
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                     "message": msg,
                     "level": record.levelno,
                     "level_name": record.levelname,
@@ -209,6 +212,15 @@ class HelenaLogger:
         self.log_directory.mkdir(parents=True, exist_ok=True)
         
         self.encryption_key = encryption_key
+        if encryption_key:
+            try:
+                # Helena config uses raw 32-byte key material.
+                self.fernet = Fernet(base64.urlsafe_b64encode(encryption_key))
+            except Exception:
+                # If caller already provided a Fernet key, try it directly.
+                self.fernet = Fernet(encryption_key)
+        else:
+            self.fernet = None
         self.max_log_size = max_log_size_mb * 1024 * 1024
         self.retention_days = log_retention_days
         
@@ -435,7 +447,7 @@ class HelenaLogger:
     
     def _cleanup_old_logs(self):
         """Clean up logs older than retention period"""
-        cutoff_time = datetime.utcnow().timestamp() - (self.retention_days * 24 * 3600)
+        cutoff_time = datetime.now(timezone.utc).timestamp() - (self.retention_days * 24 * 3600)
         
         for log_file in self.log_directory.glob("*.log*"):
             if log_file.stat().st_mtime < cutoff_time:
@@ -451,7 +463,9 @@ def get_logger() -> HelenaLogger:
     """Get global logger instance"""
     global _helena_logger
     if _helena_logger is None:
-        raise RuntimeError("HelenaLogger not initialized. Call init_logging() first.")
+        # Lazy-initialize with safe defaults so imports never fail.
+        default_dir = Path.home() / ".helena" / "logs"
+        _helena_logger = HelenaLogger(log_directory=default_dir)
     return _helena_logger
 
 def init_logging(log_directory: Path,

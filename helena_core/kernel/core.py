@@ -212,7 +212,14 @@ class PermissionManager:
             OperationalMode.ENGINEERING: {
                 "code_generate": True,
                 "code_execute": True,
+                "code_read": True,
+                "code_write": True,
+                "code_search": True,
+                "code_list": True,
                 "system_control": True,
+                "memory_read": True,
+                "memory_store": True,
+                "memory_retrieve": True,
                 "memory_write": True,
                 "module_load": True,
                 "network_access": True,
@@ -223,7 +230,14 @@ class PermissionManager:
             OperationalMode.TOOL: {
                 "code_generate": True,
                 "code_execute": True,
+                "code_read": True,
+                "code_write": False,
+                "code_search": True,
+                "code_list": True,
                 "system_control": False,
+                "memory_read": True,
+                "memory_store": False,
+                "memory_retrieve": True,
                 "memory_write": False,
                 "module_load": False,
                 "network_access": False,
@@ -234,7 +248,14 @@ class PermissionManager:
             OperationalMode.DEFENSIVE: {
                 "code_generate": False,
                 "code_execute": False,
+                "code_read": True,
+                "code_write": False,
+                "code_search": True,
+                "code_list": True,
                 "system_control": True,
+                "memory_read": True,
+                "memory_store": True,
+                "memory_retrieve": True,
                 "memory_write": True,
                 "module_load": False,
                 "network_access": True,
@@ -245,7 +266,14 @@ class PermissionManager:
             OperationalMode.BACKGROUND: {
                 "code_generate": False,
                 "code_execute": False,
+                "code_read": False,
+                "code_write": False,
+                "code_search": False,
+                "code_list": False,
                 "system_control": False,
+                "memory_read": True,
+                "memory_store": True,
+                "memory_retrieve": True,
                 "memory_write": False,
                 "module_load": False,
                 "network_access": False,
@@ -258,9 +286,9 @@ class PermissionManager:
         # Additional constraints based on source
         self.source_constraints = {
             "operator": set(self.permission_matrix[OperationalMode.ENGINEERING].keys()),  # Full access
-            "module": {"code_generate", "code_execute", "memory_read"},  # Limited
+            "module": {"code_generate", "code_execute", "code_read", "code_search", "memory_read", "memory_retrieve"},  # Limited
             "system": set(self.permission_matrix[OperationalMode.ENGINEERING].keys()),  # Full
-            "training": {"memory_read", "memory_write", "training_start"},  # Training only
+            "training": {"memory_read", "memory_store", "memory_retrieve", "memory_write", "training_start"},  # Training only
         }
     
     def check_permission(self, 

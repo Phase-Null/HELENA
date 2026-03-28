@@ -38,6 +38,8 @@ class TestHELENAKernel(unittest.TestCase):
             operator_id="test_operator",
             config_manager=self.config_mock
         )
+        with patch.object(self.kernel, '_start_event_loop'):
+            self.kernel.initialize()
     
     def test_initialization(self):
         """Test kernel initialization"""
@@ -148,8 +150,8 @@ class TestHELENAKernel(unittest.TestCase):
         tasks = []
         for priority in [TaskPriority.LOW, TaskPriority.HIGH, TaskPriority.NORMAL]:
             task_id = self.kernel.submit_task(
-                command="test",
-                parameters={},
+                command="chat",
+                parameters={"message": "priority test"},
                 source="system",
                 priority=priority
             )

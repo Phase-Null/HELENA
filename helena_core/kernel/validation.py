@@ -366,6 +366,7 @@ class ValidationChain:
         self.validators: List[Validator] = []
         self.validation_cache = {}
         self.cache_size = 1000
+        self.cache_hits = 0
     
     def setup_default_validators(self, regulatory_core=None):
         """Setup default validation chain, optionally with RegulatoryCore."""
@@ -391,8 +392,9 @@ class ValidationChain:
         cache_key = self._generate_cache_key(task)
         if cache_key in self.validation_cache:
             cached = self.validation_cache[cache_key]
+            self.cache_hits += 1
             cached.validation_time = time.time() - start_time
-            logger.debug("ValidationChain", f"Cache hit for task {task.task_id}")
+            logger.debug(f"ValidationChain cache hit for task {task.task_id}")
             return cached
         
         # Create result
@@ -417,11 +419,13 @@ class ValidationChain:
         
         # Log validation result
         if result.passed:
-            logger.debug("ValidationChain", 
-                        f"Validation passed for task {task.task_id} in {result.validation_time:.3f}s")
+            logger.debug(
+                f"ValidationChain passed for task {task.task_id} in {result.validation_time:.3f}s"
+            )
         else:
-            logger.warning("ValidationChain", 
-                          f"Validation failed for task {task.task_id}: {len(result.issues)} issues")
+            logger.warning(
+                f"ValidationChain failed for task {task.task_id}: {len(result.issues)} issues"
+            )
         
         return result
     
@@ -450,16 +454,15 @@ class ValidationChain:
     
     def get_stats(self) -> Dict[str, Any]:
         """Get validation statistics"""
-        cache_hits = sum(1 for r in self.validation_cache.values() if hasattr(r, 'cached'))
-        
         return {
             "validators": len(self.validators),
             "cache_size": len(self.validation_cache),
-            "cache_hits": cache_hits,
-            "cache_hit_rate": cache_hits / max(len(self.validation_cache), 1)
+            "cache_hits": self.cache_hits,
+            "cache_hit_rate": self.cache_hits / max(self.cache_hits + len(self.validation_cache), 1)
         }
     
     def clear_cache(self):
         """Clear validation cache"""
         self.validation_cache.clear()
-        logger.info("ValidationChain", "Validation cache cleared")
+        self.cache_hits = 0
+        logger.info("ValidationChain validation cache cleared")
