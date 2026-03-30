@@ -49,11 +49,11 @@ class HelenaNetInference:
                 return
  
             # Load config
-            self.config = torch.load(config_path, map_location=self.device)
+            self.config = torch.load(config_path, map_location=self.device, weights_only=False)
  
             # Load model
             self.model = HelenaNet(self.config)
-            state = torch.load(model_path, map_location=self.device)
+            state = torch.load(model_path, map_location=self.device, weights_only=False)
             self.model.load_state_dict(state)
             self.model.eval()
             self.model.to(self.device)
