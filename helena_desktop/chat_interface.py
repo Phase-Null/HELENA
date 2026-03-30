@@ -31,7 +31,7 @@ class ChatWorker(QThread):
             if not task_id:
                 self.error.emit("Task submission failed")
                 return
-            for _ in range(300):
+            for _ in range(900):
                 time.sleep(0.1)
                 result = self.kernel.get_task_status(task_id)
                 if result and result.get("status") == "completed":
