@@ -358,20 +358,21 @@ class HelenaNetTrainer:
                 step += 1
  
                 # Logging
-                if step % 100 == 0:
-                    avg_loss = total_loss / 100
-                    elapsed = time.time() - start_time
-                    tps = step * self.config.batch_size * self.config.max_seq_len / elapsed
-                    print(f"Step {step:5d}/{self.config.max_steps} | "
-                          f"loss={avg_loss:.4f} | "
-                          f"lr={optimizer.param_groups[0]['lr']:.2e} | "
-                          f"tokens/s={tps:.0f}")
-                    total_loss = 0.0
- 
-                    # Save best
-                    if avg_loss < best_loss:
-                        best_loss = avg_loss
-                        self.save(suffix="_best")
+                # Log every step
+                step_loss = loss.item()
+                total_loss += step_loss
+                elapsed = time.time() - start_time
+                avg_loss = total_loss / step
+                print(f"Step {step:5d}/{self.config.max_steps} | "
+                      f"loss={step_loss:.4f} | "
+                      f"avg={avg_loss:.4f} | "
+                      f"lr={optimizer.param_groups[0]['lr']:.2e} | "
+                      f"elapsed={elapsed:.0f}s", flush=True)
+
+                # Save best every 100 steps
+                if step % 100 == 0 and avg_loss < best_loss:
+                    best_loss = avg_loss
+                    self.save(suffix="_best")
  
                 # Checkpoint every 1000 steps
                 if step % 1000 == 0:
