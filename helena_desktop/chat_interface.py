@@ -24,7 +24,7 @@ class ChatWorker(QThread):
             source="operator",
             priority=TaskPriority.NORMAL
         )
-        max_attempts = 300  # 300 * 0.1s = 30 seconds max
+        max_attempts = 900  # 900 * 0.1s = 90 seconds max
         for attempt in range(max_attempts):
             time.sleep(0.1)
             result = self.kernel.get_task_status(task_id)
