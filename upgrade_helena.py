@@ -209,7 +209,7 @@ class StructuralPatternRecognizer:
                     error = f.get('result', {}).get('error', '')
                     if 'missing' in error.lower():
                         import re
-                        m = re.search(r"['\"]([\w+])['\"]", error)
+                        m = re.search(r"['\"]([A-Za-z0-9_]+)['\"]", error)
                         if m:
                             missing_params.append(m.group(1))
                 if missing_params:
@@ -415,7 +415,7 @@ class Sandbox:
         if not func_name:
             return new_code  # whole file replacement
         import re
-        pattern = rf"""def {func_name}[(].*?[)]:.*?(?=\ndef |\Z)"""
+        pattern = "def " + func_name + r"[(].*?[)]:.*?(?=\ndef |\Z)"
         return re.sub(pattern, new_code, source, flags=re.DOTALL)
 
     def _measure_performance(self, codebase):
