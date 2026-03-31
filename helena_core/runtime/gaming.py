@@ -381,7 +381,7 @@ class GamingOptimizer:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
             except Exception as e:
-                logger.warning("GamingOptimizer", f"Failed to adjust priority for PID {pid}: {e}")
+                logger.warning(f"GamingOptimizer: Failed to adjust priority for PID {pid}: {e}")
         
         # Reserve memory if specified
         if session.game.memory_reservation_mb > 0:
@@ -519,11 +519,11 @@ class GamingOptimizer:
             try:
                 proc = psutil.Process(pid)
                 # Reset to default nice value
-                proc.nice(0)  # Default on Unix-like systems
+                proc.nice(psutil.NORMAL_PRIORITY_CLASS)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
             except Exception as e:
-                logger.warning("GamingOptimizer", f"Failed to restore priority for PID {pid}: {e}")
+                logger.warning(f"GamingOptimizer: Failed to restore priority for PID {pid}: {e}")
         
         # Notify callback
         if self.on_game_ended:
