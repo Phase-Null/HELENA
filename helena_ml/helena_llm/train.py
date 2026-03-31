@@ -288,7 +288,7 @@ class HelenaNetTrainer:
             self.dataset.load_from_chromadb(str(chroma_path))
  
         # Always add synthetic data for bootstrapping
-        self.dataset.add_synthetic_data(n=1000)
+        self.dataset.add_synthetic_data(n=50)
  
         print(f"Dataset ready: {len(self.dataset.examples)} examples")
  
