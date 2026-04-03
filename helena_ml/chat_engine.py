@@ -635,6 +635,31 @@ class ChatEngine:
 
             return response
 
+    def _web_search_response(self, query: str) -> Optional[str]:
+        """Execute a web search and return formatted results."""
+        try:
+            if not hasattr(self, '_web_search'):
+                from helena_ml.web_search import WebSearch
+                self._web_search = WebSearch()
+
+            if not self._web_search.available:
+                return None  # Fall through to normal chat
+
+            # Try DuckDuckGo first
+            result = self._web_search.search(query)
+            if result["ok"] and result["results"]:
+                formatted = self._web_search.format_results(result)
+                return f"Here's what I found:\n\n{formatted}"
+
+            # Try Wikipedia for factual queries
+            wiki = self._web_search.wikipedia(query)
+            if wiki["ok"]:
+                return f"{wiki['summary']}\n\nSource: {wiki['url']}"
+
+            return None  # Fall through to normal chat
+        except Exception:
+            return None
+
     def _detect_tool_intent(self, user_message: str) -> Optional[str]:
         """
         Ask the LLM if this message requires a code tool.
@@ -656,6 +681,15 @@ class ChatEngine:
         if not any(kw in msg_lower for kw in code_keywords):
             return None
 
+        # Web search pre-filter — check before asking LLM
+        web_keywords = (
+            "search", "look up", "find out", "what is", "who is", "when did",
+            "how does", "latest", "current", "news", "google", "internet",
+            "online", "website", "today", "recent", "2024", "2025", "2026"
+        )
+        if any(kw in msg_lower for kw in web_keywords):
+            return self._web_search_response(user_message)
+
         # Direct shortcuts — no need to ask the LLM for these
         if any(p in msg_lower for p in ("list your files", "list your source", "list source files", "list all files", "list files")):
             result = self._code_editor.list_files()
@@ -665,6 +699,7 @@ class ChatEngine:
         decision_prompt = (
             "You are a tool-use classifier for an AI system called HELENA. "
             "HELENA has access to these tools:\n"
+            "  web_search  — search the internet for current information (needs: query)\n"
             "  code_read   — read a specific source file (needs: path)\n"
             "  code_write  — write content to a source file (needs: path, content, reason)\n"
             "  code_search — search for a string across all source files (needs: query)\n"
@@ -672,9 +707,9 @@ class ChatEngine:
             "  none        — no tool needed, handle as normal conversation\n\n"
             "Given the user message below, respond ONLY with a JSON object.\n"
             "Examples:\n"
+            '  {"tool": "web_search", "query": "latest AI research 2026"}\n'
             '  {"tool": "code_read", "path": "helena_ml/chat_engine.py"}\n'
             '  {"tool": "code_search", "query": "def chat"}\n'
-            '  {"tool": "code_list", "subdir": "helena_ml"}\n'
             '  {"tool": "none"}\n\n'
             f'User message: "{user_message}"\n'
             "JSON:"
@@ -733,6 +768,10 @@ class ChatEngine:
                 subdir = decision.get("subdir", "")
                 result = ce.list_files(subdir=subdir)
                 return f"Files in `{subdir or 'project root'}`:\n\n" + "\n".join(result["files"])
+
+            if tool == "web_search":
+                query = decision.get("query", user_message)
+                return self._web_search_response(query) or f"I searched for '{query}' but couldn't find results."
 
             if tool == "code_write":
                 # Write is intentionally not auto-executed from conversation for safety
