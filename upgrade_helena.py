@@ -415,7 +415,7 @@ class Sandbox:
         if not func_name:
             return new_code  # whole file replacement
         import re
-        pattern = "def " + func_name + r"[(].*?[)]:.*?(?=\ndef |\Z)"
+        pattern = "def " + func_name + r"[(].*?[)]:.*?(?=\ndef |$)"
         return re.sub(pattern, new_code, source, flags=re.DOTALL)
 
     def _measure_performance(self, codebase):
@@ -988,7 +988,7 @@ def main():
             content = f.read()
         # Replace the existing _process_engineering method
         import re
-        pattern = r'def _process_engineering\(self, task\) -> Dict\[str, Any\]:.*?(?=def _process_tool|\Z)'
+        pattern = r'def _process_engineering\(self, task\) -> Dict\[str, Any\]:.*?(?=def _process_tool|$)'
         new_method = helena_core_modes_patch.strip()
         if re.search(pattern, content, re.DOTALL):
             content = re.sub(pattern, new_method, content, flags=re.DOTALL)

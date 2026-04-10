@@ -84,6 +84,8 @@ class HelenaNetInference:
             return None
         try:
             input_ids = self.tokenizer.encode_conversation(messages)
+            max_input = self.config.max_seq_len - min(max_tokens, self.config.max_new_tokens) - 10
+            input_ids = input_ids[-max_input:]
             response_ids = self._generate(
                 input_ids,
                 max_new_tokens=min(max_tokens, self.config.max_new_tokens),
@@ -107,6 +109,8 @@ class HelenaNetInference:
             return None
         try:
             input_ids = self.tokenizer.encode(prompt, add_special_tokens=True)
+            max_input = self.config.max_seq_len - min(max_tokens, self.config.max_new_tokens) - 10
+            input_ids = input_ids[-max_input:]
             response_ids = self._generate(
                 input_ids,
                 max_new_tokens=min(max_tokens, self.config.max_new_tokens),
@@ -127,6 +131,8 @@ class HelenaNetInference:
         if not self.available:
             return
         input_ids = self.tokenizer.encode_conversation(messages)
+        max_input = self.config.max_seq_len - self.config.max_new_tokens - 10
+        input_ids = input_ids[-max_input:]
         for token_id in self._generate_stream(input_ids, temperature=temperature):
             token = self.tokenizer.decode([token_id], skip_special_tokens=True)
             if token:
