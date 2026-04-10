@@ -49,7 +49,12 @@ class HelenaNetInference:
                 return
  
             # Load config
-            self.config = torch.load(config_path, map_location=self.device, weights_only=False)
+            if config_path.exists():
+                self.config = torch.load(config_path, map_location=self.device, weights_only=False)
+            else:
+                from .config import HELENA_NANO
+                print("HELENA-Net: config.pt missing, defaulting to NANO config.")
+                self.config = HELENA_NANO
  
             # Load model
             self.model = HelenaNet(self.config)
