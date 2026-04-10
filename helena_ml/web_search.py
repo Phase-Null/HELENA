@@ -34,7 +34,7 @@ class WebSearch:
     def _check_connectivity(self) -> bool:
         try:
             urllib.request.urlopen(
-                "https://api.duckduckgo.com/?q=test&format=json",
+                "https://www.google.com",
                 timeout=3
             )
             return True
