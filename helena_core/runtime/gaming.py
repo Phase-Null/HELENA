@@ -5,6 +5,7 @@ Gaming compatibility and automatic optimization
 import time
 import threading
 import psutil
+import sys
 from typing import Dict, List, Any, Optional, Set, Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
@@ -369,12 +370,12 @@ class GamingOptimizer:
         for pid in session.process_ids:
             try:
                 proc = psutil.Process(pid)
-                current_nice = proc.nice()
-                
-                # Lower nice value = higher priority (on Unix-like systems)
-                # Windows uses different priority classes
-                target_nice = max(0, current_nice - session.game.cpu_priority)
-                proc.nice(target_nice)
+                if sys.platform == "win32":
+                    proc.nice(psutil.ABOVE_NORMAL_PRIORITY_CLASS)
+                else:
+                    current_nice = proc.nice()
+                    target_nice = max(-10, current_nice - session.game.cpu_priority)
+                    proc.nice(target_nice)
                 
                 optimizations_applied.append(f"priority:{pid}")
                 
@@ -519,7 +520,10 @@ class GamingOptimizer:
             try:
                 proc = psutil.Process(pid)
                 # Reset to default nice value
-                proc.nice(psutil.NORMAL_PRIORITY_CLASS)
+                if sys.platform == "win32":
+                    proc.nice(psutil.NORMAL_PRIORITY_CLASS)
+                else:
+                    proc.nice(0)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
             except Exception as e:
