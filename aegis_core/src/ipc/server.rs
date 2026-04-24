@@ -150,6 +150,7 @@ impl IpcServer {
                     MessageKind::Pong,
                     serde_json::json!({ "echo_id": msg.id }),
                 );
+                pong.id = msg.id.clone();
                 self.send_to_helena(pong).await;
             }
 
@@ -170,6 +171,7 @@ impl IpcServer {
                     MessageKind::StatusReport,
                     serde_json::to_value(payload).unwrap_or_default(),
                 );
+                pong.id = msg.id.clone();
                 self.send_to_helena(response).await;
             }
 
@@ -184,6 +186,7 @@ impl IpcServer {
                     MessageKind::PendingReport,
                     payload,
                 );
+                pong.id = msg.id.clone();
                 self.send_to_helena(response).await;
             }
 
