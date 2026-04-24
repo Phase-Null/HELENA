@@ -27,7 +27,7 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 use ipc::{
-    protocol::{Message, MessageKind, MessageSource, StatusPayload, ThreatLevel},
+    protocol::{Message, MessageKind, MessageSource, StatusPayload},
     server::IpcServer,
 };
 use state::AegisState;
