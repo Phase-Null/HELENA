@@ -106,7 +106,7 @@ impl Message {
 
     /// Parse from a single line of JSON.
     pub fn from_line(line: &str) -> anyhow::Result<Self> {
-        Ok(serde_json::from_str(line)?)
+        Ok(serde_json::from_str::<Self>(line)?)
     }
 }
 
