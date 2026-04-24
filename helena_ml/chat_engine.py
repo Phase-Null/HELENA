@@ -492,6 +492,28 @@ class ChatEngine:
 
         logger.info("ChatEngine", "Chat engine initialised (fully offline)")
 
+    def inject_security_alert(self, message: str) -> None:
+        if not hasattr(self, "_security_alerts"):
+            self._security_alerts = []
+        if not hasattr(self, "_security_lock"):
+            import threading
+            self._security_lock = threading.Lock()
+        with self._security_lock:
+            self._security_alerts.append(message)
+            if len(self._security_alerts) > 10:
+                self._security_alerts.pop(0)
+
+    def get_pending_security_alerts(self) -> list:
+        if not hasattr(self, "_security_alerts"):
+            return []
+        if not hasattr(self, "_security_lock"):
+            import threading
+            self._security_lock = threading.Lock()
+        with self._security_lock:
+            alerts = list(self._security_alerts)
+            self._security_alerts.clear()
+        return alerts
+
     # ── Public API ────────────────────────────────────────────────
 
     def chat(self, user_message: str) -> str:
@@ -597,6 +619,12 @@ class ChatEngine:
                     f"{emotion_line} {personality_line}\n"
                     f"{memory_line}"
                 )
+
+                # Prepend any pending AEGIS security alerts
+                security_alerts = self.get_pending_security_alerts()
+                if security_alerts:
+                    alert_context = "\n\n".join(security_alerts)
+                    system_content = f"{system_content}\n\n{alert_context}"
 
                 # Build message list for /api/chat
                 messages = [{"role": "system", "content": system_content}]
