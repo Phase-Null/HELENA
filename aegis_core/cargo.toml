@@ -36,6 +36,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # UUID for message IDs
 uuid = { version = "1", features = ["v4"] }
+anyhow = "1"
 
 [profile.release]
 opt-level     = 3
