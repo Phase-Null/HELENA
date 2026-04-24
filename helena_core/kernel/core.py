@@ -461,7 +461,22 @@ class HELENAKernel:
         self.response_formatter = ResponseFormatter()
         self.learning_hook = LearningHook()
         self.mode_processor = ModeProcessor(kernel=self)
-        
+
+        # AEGIS Security Bridge
+        try:
+            from aegis_python.aegis_bridge import AegisBridge
+            self.aegis = AegisBridge()
+            def _on_aegis_alert(alert):
+                if self.chat_engine:
+                    briefing = self.aegis.format_alert_for_helena(alert)
+                    self.chat_engine.inject_security_alert(briefing)
+            self.aegis.on_alert = _on_aegis_alert
+            self.aegis.start()
+            logger.info("HELENAKernel", "AEGIS security bridge started.")
+        except Exception as e:
+            self.aegis = None
+            logger.warning("HELENAKernel", f"AEGIS bridge failed to start: {e}")
+                     
         # Worker pool
         self.worker_pool = ThreadPoolExecutor(
             max_workers=4,  # Configurable
@@ -977,6 +992,10 @@ class HELENAKernel:
                         future.result(timeout=5)  # Wait up to 5 seconds
                     except Exception:
                         pass  # Task might have failed
+
+            # Stop AEGIS security bridge
+            if hasattr(self, "aegis") and self.aegis:
+                self.aegis.stop()
             
             # Shutdown worker pool
             self.worker_pool.shutdown(wait=graceful)
