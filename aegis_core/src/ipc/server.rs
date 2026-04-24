@@ -144,11 +144,10 @@ impl IpcServer {
     async fn handle_message(&self, msg: Message) {
         match msg.kind {
             MessageKind::Ping => {
-                // Reply with Pong immediately
-                let pong = Message::new(
+                let mut pong = Message::new(
                     MessageSource::Aegis,
                     MessageKind::Pong,
-                    serde_json::json!({ "echo_id": msg.id }),
+                    serde_json::json!({}),
                 );
                 pong.id = msg.id.clone();
                 self.send_to_helena(pong).await;
@@ -166,12 +165,12 @@ impl IpcServer {
                 };
                 drop(state);
 
-                let response = Message::new(
+                let mut response = Message::new(
                     MessageSource::Aegis,
                     MessageKind::StatusReport,
                     serde_json::to_value(payload).unwrap_or_default(),
                 );
-                pong.id = msg.id.clone();
+                response.id = msg.id.clone();
                 self.send_to_helena(response).await;
             }
 
@@ -181,12 +180,12 @@ impl IpcServer {
                 let payload = serde_json::json!({ "pending": pending });
                 drop(state);
 
-                let response = Message::new(
+                let mut response = Message::new(
                     MessageSource::Aegis,
                     MessageKind::PendingReport,
                     payload,
                 );
-                pong.id = msg.id.clone();
+                response.id = msg.id.clone();
                 self.send_to_helena(response).await;
             }
 
