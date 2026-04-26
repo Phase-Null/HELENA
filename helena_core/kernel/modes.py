@@ -114,8 +114,41 @@ class ModeProcessor:
         """Engineering mode - comprehensive analysis and verbose output"""
         command = task.command
 
+        # AEGIS security commands
         if command == "chat":
             message = task.parameters.get("message", "")
+            aegis = getattr(self.kernel, "aegis", None)
+            if aegis:
+                import re
+                msg = message.lower().strip()
+
+                if any(kw in msg for kw in ["security status", "threat level", "aegis status", "security briefing"]):
+                    return {"result": aegis.format_status_for_helena(), "processing_time": 0.0}
+
+                if "security pending" in msg or "pending approval" in msg:
+                    pending = aegis.pending()
+                    if not pending:
+                        return {"result": "No security responses pending approval.", "processing_time": 0.0}
+                    lines = ["Pending responses requiring your approval:"]
+                    for p in pending:
+                        lines.append(f"  ID: {p['id']} — {p['description']}")
+                    lines.append("\nTo approve: 'approve security response <id> <reason>'")
+                    return {"result": "\n".join(lines), "processing_time": 0.0}
+
+                approve_match = re.search(r"approve\s+(?:security\s+)?response\s+([a-f0-9]+)\s+(.+)", msg)
+                if approve_match:
+                    pkg_id = approve_match.group(1)
+                    reason = approve_match.group(2).strip()
+                    ok = aegis.approve(pkg_id, reason)
+                    return {"result": f"Approval sent for {pkg_id}." if ok else "Approval failed — AEGIS not connected.", "processing_time": 0.0}
+
+                reject_match = re.search(r"reject\s+(?:security\s+)?response\s+([a-f0-9]+)", msg)
+                if reject_match:
+                    pkg_id = reject_match.group(1)
+                    aegis.reject(pkg_id)
+                    return {"result": f"Response {pkg_id} rejected.", "processing_time": 0.0}
+
+            # existing chat handling continues below
             chat_engine = getattr(self.kernel, 'chat_engine', None)
             llm = getattr(self.kernel, 'llm', None)
 
