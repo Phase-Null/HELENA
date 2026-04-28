@@ -227,7 +227,7 @@ impl Agent for ProcessWatchdog {
             }
 
             // ── Check 3: new process since last scan ──────────────────────────
-            if !known.contains(&pid) && pid > 4 && !self.safe.contains(base_name.as_str()) {
+            if !known.contains(&pid) && pid > 4 && !self.safe.contains(name.as_str()) {
                 findings.push(Finding {
                     finding_type: "new_process".to_string(),
                     severity: 0.2,
