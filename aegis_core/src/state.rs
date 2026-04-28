@@ -1,33 +1,31 @@
 // src/state.rs
 //
-// The central shared state of AEGIS.
-// Every agent reads from and writes to this.
-// Protected by a tokio Mutex — only one writer at a time,
-// but reads are fast because we clone what we need.
-//
-// This is also where pending response packages live,
-// and where the approval gate is enforced.
+// Central shared state of AEGIS.
+// Unchanged from Phase 0 except for one addition:
+//   snapshot_context() — creates a lightweight read-only context snapshot
+//   that agents use for correlation without holding the lock during their scan.
 
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::ipc::protocol::{Finding, ResponseTier, ThreatLevel};
+use crate::ipc::protocol::SharedContext;
 
 // ── Pending response package ───────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponsePackage {
-    pub package_id:   String,
-    pub tier:         ResponseTier,
-    pub trigger:      String,
-    pub description:  String,
-    pub actions:      Vec<PlannedAction>,
-    pub created_at:   DateTime<Utc>,
-    pub approved:     bool,
-    pub approved_by:  Option<String>,
-    pub approved_at:  Option<DateTime<Utc>>,
-    pub reason_code:  Option<String>,
+    pub package_id:  String,
+    pub tier:        ResponseTier,
+    pub trigger:     String,
+    pub description: String,
+    pub actions:     Vec<PlannedAction>,
+    pub created_at:  DateTime<Utc>,
+    pub approved:    bool,
+    pub approved_by: Option<String>,
+    pub approved_at: Option<DateTime<Utc>>,
+    pub reason_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,56 +35,39 @@ pub struct PlannedAction {
 }
 
 // ── Shared threat context entry ────────────────────────────────────────────────
-//
-// When an agent writes a finding, it goes here.
-// Other agents read this to correlate their own findings.
-// HELENA reads summarised form via the IPC status report.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreatContextEntry {
-    pub agent_id:    String,
-    pub finding:     Finding,
-    pub written_at:  DateTime<Utc>,
-    pub read_count:  u32,  // how many other agents have read this
+    pub agent_id:   String,
+    pub finding:    Finding,
+    pub written_at: DateTime<Utc>,
+    pub read_count: u32,
 }
 
 // ── Central state ──────────────────────────────────────────────────────────────
 
 pub struct AegisState {
-    // Current assessed threat level
-    pub threat_level: ThreatLevel,
-
-    // How many agents are currently running
+    pub threat_level:       ThreatLevel,
     pub active_agent_count: u32,
-
-    // Pending Tier 4/5 response packages waiting for operator approval
-    pub pending_responses: HashMap<String, ResponsePackage>,
-
-    // Executed response history (last 100)
-    pub response_history: Vec<ResponsePackage>,
-
-    // Shared threat context — agents write here, others read for correlation
-    // Key is a composite of agent_type + finding_type + target
-    // so multiple agents can write about the same IP without colliding
-    pub threat_context: HashMap<String, ThreatContextEntry>,
-
-    // Counters
-    pub events_processed: u64,
-    pub started_at:       DateTime<Utc>,
-    pub last_event_at:    Option<DateTime<Utc>>,
+    pub pending_responses:  HashMap<String, ResponsePackage>,
+    pub response_history:   Vec<ResponsePackage>,
+    pub threat_context:     HashMap<String, ThreatContextEntry>,
+    pub events_processed:   u64,
+    pub started_at:         DateTime<Utc>,
+    pub last_event_at:      Option<DateTime<Utc>>,
 }
 
 impl AegisState {
     pub fn new() -> Self {
         Self {
-            threat_level:        ThreatLevel::Idle,
-            active_agent_count:  0,
-            pending_responses:   HashMap::new(),
-            response_history:    Vec::new(),
-            threat_context:      HashMap::new(),
-            events_processed:    0,
-            started_at:          Utc::now(),
-            last_event_at:       None,
+            threat_level:       ThreatLevel::Idle,
+            active_agent_count: 0,
+            pending_responses:  HashMap::new(),
+            response_history:   Vec::new(),
+            threat_context:     HashMap::new(),
+            events_processed:   0,
+            started_at:         Utc::now(),
+            last_event_at:      None,
         }
     }
 
@@ -94,9 +75,58 @@ impl AegisState {
         (Utc::now() - self.started_at).num_seconds().max(0) as u64
     }
 
-    // ── Threat context ───────────────────────────────────────────────────────
+    // ── Snapshot for agent correlation ────────────────────────────────────────
+    //
+    // Called just before spawning each agent scan.
+    // Builds a cheap read-only summary from the threat context so agents
+    // can correlate without holding the async Mutex during blocking I/O.
 
-    /// Agent writes a finding to the shared context.
+    pub fn snapshot_context(&self) -> SharedContext {
+        let mut flagged_ips:   Vec<(String, f32)> = Vec::new();
+        let mut flagged_pids:  Vec<(u32,    f32)> = Vec::new();
+        let mut flagged_paths: Vec<(String, f32)> = Vec::new();
+
+        for entry in self.threat_context.values() {
+            let sev  = entry.finding.severity;
+            let data = &entry.finding.data;
+
+            if let Some(ip) = data.get("remote_ip").and_then(|v| v.as_str()) {
+                // Merge: keep highest severity per IP
+                if let Some(existing) = flagged_ips.iter_mut().find(|(i, _)| i == ip) {
+                    existing.1 = existing.1.max(sev);
+                } else {
+                    flagged_ips.push((ip.to_string(), sev));
+                }
+            }
+
+            if let Some(pid) = data.get("pid").and_then(|v| v.as_u64()) {
+                let pid = pid as u32;
+                if let Some(existing) = flagged_pids.iter_mut().find(|(p, _)| *p == pid) {
+                    existing.1 = existing.1.max(sev);
+                } else {
+                    flagged_pids.push((pid, sev));
+                }
+            }
+
+            if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
+                if let Some(existing) = flagged_paths.iter_mut().find(|(p, _)| p == path) {
+                    existing.1 = existing.1.max(sev);
+                } else {
+                    flagged_paths.push((path.to_string(), sev));
+                }
+            }
+        }
+
+        SharedContext {
+            flagged_ips,
+            flagged_pids,
+            flagged_paths,
+            threat_level: self.threat_level,
+        }
+    }
+
+    // ── Threat context ────────────────────────────────────────────────────────
+
     pub fn write_finding(&mut self, agent_id: &str, finding: Finding) {
         let key = format!("{}:{}:{}", agent_id, finding.finding_type,
             finding.data.get("remote_ip")
@@ -114,14 +144,11 @@ impl AegisState {
         self.events_processed += 1;
         self.last_event_at = Some(Utc::now());
 
-        // Prune old entries (older than 1 hour) to prevent unbounded growth
+        // Prune entries older than 1 hour
         let cutoff = Utc::now() - chrono::Duration::hours(1);
         self.threat_context.retain(|_, v| v.written_at > cutoff);
     }
 
-    /// Agent reads the threat context to correlate with its own findings.
-    /// Returns all entries from other agents (not itself).
-    /// Also increments read_count so we can see what's being used.
     pub fn read_context_for(&mut self, agent_id: &str) -> Vec<ThreatContextEntry> {
         let mut result = Vec::new();
         for entry in self.threat_context.values_mut() {
@@ -133,8 +160,6 @@ impl AegisState {
         result
     }
 
-    /// Find the highest severity finding in the context involving a given IP.
-    /// Used by agents to boost their own severity if the IP is already flagged.
     pub fn highest_severity_for_ip(&self, ip: &str) -> f32 {
         self.threat_context
             .values()
@@ -148,21 +173,15 @@ impl AegisState {
             .fold(0.0_f32, f32::max)
     }
 
-    // ── Threat level ─────────────────────────────────────────────────────────
+    // ── Threat level ──────────────────────────────────────────────────────────
 
     pub fn set_threat_level(&mut self, level: ThreatLevel) {
         if level != self.threat_level {
-            tracing::info!(
-                "Threat level: {} → {}",
-                self.threat_level,
-                level
-            );
+            tracing::info!("Threat level: {} → {}", self.threat_level, level);
             self.threat_level = level;
         }
     }
 
-    /// Escalate threat level — only goes up, never down automatically.
-    /// De-escalation requires explicit operator action or a clear-all.
     pub fn escalate_if_higher(&mut self, level: ThreatLevel) {
         if level > self.threat_level {
             self.set_threat_level(level);
@@ -175,8 +194,6 @@ impl AegisState {
         self.pending_responses.insert(pkg.package_id.clone(), pkg);
     }
 
-    /// Approve a pending response. Returns true if found and approved.
-    /// Does NOT execute — execution is handled by the response engine.
     pub fn approve_response(&mut self, package_id: &str, reason: &str, by: &str) -> bool {
         if let Some(pkg) = self.pending_responses.get_mut(package_id) {
             pkg.approved    = true;
@@ -191,7 +208,6 @@ impl AegisState {
 
     pub fn reject_response(&mut self, package_id: &str) -> bool {
         if let Some(pkg) = self.pending_responses.remove(package_id) {
-            // Move to history as unapproved
             self.archive_response(pkg);
             true
         } else {
@@ -205,7 +221,6 @@ impl AegisState {
             .filter(|(_, p)| p.approved)
             .map(|(k, _)| k.clone())
             .collect();
-
         approved.into_iter()
             .filter_map(|id| self.pending_responses.remove(&id))
             .collect()
