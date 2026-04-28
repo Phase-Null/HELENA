@@ -59,6 +59,19 @@ fn suspicious_path_fragments() -> Vec<&'static str> {
     ]
 }
 
+fn known_safe_processes() -> HashSet<&'static str> {
+    [
+        "nitrosense.exe", "opera.exe",
+        "steam.exe", "steamwebhelper.exe",
+        "onedrive.exe", "explorer.exe",
+        "searchhost.exe", "searchindexer.exe",
+        "svchost.exe", "lsass.exe", "services.exe",
+        "system", "idle", "registry",
+        "runtimebroker.exe", "sihost.exe",
+        "taskhostw.exe", "dwm.exe",
+    ].into()
+}
+
 // ── CPU history ───────────────────────────────────────────────────────────────
 
 /// Tracks CPU usage samples per PID to detect sustained high usage.
@@ -102,6 +115,7 @@ pub struct ProcessWatchdog {
     config:          AgentConfig,
     suspicious:      HashSet<&'static str>,
     bad_paths:       Vec<&'static str>,
+    safe:            HashSet<&'static str>,
     /// sysinfo System — must be kept alive between scans for CPU delta to work
     sys:             Mutex<System>,
     /// PIDs seen on previous scan — used to detect new processes
@@ -127,6 +141,7 @@ impl ProcessWatchdog {
             config:      AgentConfig::new("process_watchdog", variant, interval_secs, threshold),
             suspicious:  suspicious_names(),
             bad_paths:   suspicious_path_fragments(),
+            safe:        known_safe_processes(), 
             sys:         Mutex::new(sys),
             known_pids:  Mutex::new(known_pids),
             cpu_history: Mutex::new(CpuHistory::new(3)),
@@ -212,7 +227,7 @@ impl Agent for ProcessWatchdog {
             }
 
             // ── Check 3: new process since last scan ──────────────────────────
-            if !known.contains(&pid) && pid > 4 {
+            if !known.contains(&pid) && pid > 4 && !self.safe.contains(base_name.as_str()) {
                 findings.push(Finding {
                     finding_type: "new_process".to_string(),
                     severity: 0.2,
