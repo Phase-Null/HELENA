@@ -57,6 +57,12 @@ fn known_safe_processes() -> HashSet<&'static str> {
         "discord.exe", "slack.exe",
         "git.exe", "ssh.exe",
         "curl.exe", "wget.exe",
+        "opera.exe", "opera_gx.exe",
+        "steam.exe", "steamwebhelper.exe",
+        "discord.exe",
+        "onedrive.exe",
+        "explorer.exe",
+        "searchhost.exe", "searchindexer.exe",
     ].into()
 }
 
