@@ -203,7 +203,7 @@ fn get_process_name(pid: u32) -> Option<String> {
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
         true,
-        ProcessRefreshKind::new(),
+        ProcessRefreshKind::nothing(),
     );
 
     sys.process(sysinfo::Pid::from_u32(pid))
