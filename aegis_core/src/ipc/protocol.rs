@@ -1,24 +1,9 @@
 // src/ipc/protocol.rs
 //
-// The IPC protocol between AEGIS (Rust) and HELENA (Python).
-//
-// Everything that crosses the bridge is serialised as newline-delimited JSON.
-// One JSON object per line. This is the simplest format that is:
-//   - Human readable (you can read the socket stream in a terminal)
-//   - Language agnostic (Python's json module handles it trivially)
-//   - Streamable (no need to frame messages with length prefixes)
-//   - Debuggable (if something goes wrong you can see exactly what was sent)
-//
-// Transport: TCP socket on 127.0.0.1:47201
-// Port 47201 is unregistered with IANA and unlikely to conflict with anything.
-// Loopback only — AEGIS is never reachable from the network.
-//
-// Message flow:
-//   HELENA → AEGIS: Commands (query status, approve response, set threat level)
-//   AEGIS  → HELENA: Events (alerts, status updates, telemetry summaries)
-//
-// Both sides speak the same format. Direction is indicated by the `direction`
-// field, which is informational only — the socket itself tells you who sent it.
+// All shared types used across the AEGIS codebase.
+// Lives in ipc/ because the IPC bridge is the reason these types exist,
+// but SharedContext and Finding are also used by agents and state.
+// Centralising here breaks any circular dependency risk.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -57,35 +42,81 @@ impl std::fmt::Display for ThreatLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ResponseTier {
-    Monitor   = 0,  // log only, automatic
-    Alert     = 1,  // notify HELENA, automatic
-    Contain   = 2,  // block IP / isolate, AEGIS decides
-    Harden    = 3,  // firewall changes, AEGIS decides + logs
-    Retaliate = 4,  // deception layer — REQUIRES operator approval
-    Lockdown  = 5,  // full isolation — REQUIRES approval + 30s delay
+    Monitor   = 0,
+    Alert     = 1,
+    Contain   = 2,
+    Harden    = 3,
+    Retaliate = 4,  // requires operator approval
+    Lockdown  = 5,  // requires approval + 30s delay
+}
+
+// ── Finding — one observation from one agent ──────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Finding {
+    pub finding_type: String,
+    pub severity:     f32,       // 0.0 - 1.0
+    pub detail:       String,    // human-readable, surfaces in HELENA chat
+    pub data:         serde_json::Value,  // agent-specific structured data
+}
+
+// ── SharedContext — lightweight correlation snapshot ──────────────────────────
+//
+// Built from AegisState before each agent scan.
+// Passed into Agent::scan() so agents can correlate with other agents'
+// findings WITHOUT holding the async Mutex during blocking I/O.
+//
+// Lives here (not in agents::base or state) to break the circular
+// dependency that would result from state importing agents and vice versa.
+
+#[derive(Debug, Clone)]
+pub struct SharedContext {
+    /// IPs flagged by any agent, with highest known severity
+    pub flagged_ips:   Vec<(String, f32)>,
+    /// PIDs flagged by any agent
+    pub flagged_pids:  Vec<(u32, f32)>,
+    /// Paths flagged by any agent
+    pub flagged_paths: Vec<(String, f32)>,
+    /// Current system-wide threat level
+    pub threat_level:  ThreatLevel,
+}
+
+impl SharedContext {
+    pub fn empty() -> Self {
+        Self {
+            flagged_ips:   Vec::new(),
+            flagged_pids:  Vec::new(),
+            flagged_paths: Vec::new(),
+            threat_level:  ThreatLevel::Idle,
+        }
+    }
+
+    /// Highest severity seen for this IP across all agents. 0.0 if not flagged.
+    pub fn ip_severity(&self, ip: &str) -> f32 {
+        self.flagged_ips.iter()
+            .find(|(i, _)| i == ip)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0)
+    }
+
+    /// Highest severity seen for this PID. 0.0 if not flagged.
+    pub fn pid_severity(&self, pid: u32) -> f32 {
+        self.flagged_pids.iter()
+            .find(|(p, _)| *p == pid)
+            .map(|(_, s)| *s)
+            .unwrap_or(0.0)
+    }
 }
 
 // ── Message envelope ──────────────────────────────────────────────────────────
-//
-// Every message has this wrapper. The `payload` field contains the actual
-// command or event data, specific to each message type.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
-    /// Unique ID for this message. Used to correlate responses to requests.
-    pub id: String,
-
-    /// Wall clock time the message was created.
+    pub id:        String,
     pub timestamp: DateTime<Utc>,
-
-    /// Who sent this. Informational.
-    pub source: MessageSource,
-
-    /// What kind of message this is.
-    pub kind: MessageKind,
-
-    /// The actual payload. Varies by `kind`.
-    pub payload: serde_json::Value,
+    pub source:    MessageSource,
+    pub kind:      MessageKind,
+    pub payload:   serde_json::Value,
 }
 
 impl Message {
@@ -99,12 +130,10 @@ impl Message {
         }
     }
 
-    /// Serialise to a single line of JSON (no newlines within).
     pub fn to_line(&self) -> anyhow::Result<String> {
         Ok(serde_json::to_string(self)?)
     }
 
-    /// Parse from a single line of JSON.
     pub fn from_line(line: &str) -> anyhow::Result<Self> {
         Ok(serde_json::from_str::<Self>(line)?)
     }
@@ -123,30 +152,24 @@ pub enum MessageSource {
 #[serde(rename_all = "snake_case")]
 pub enum MessageKind {
     // HELENA → AEGIS
-    Ping,               // health check
-    QueryStatus,        // ask for current state
-    QueryPending,       // ask for pending approval requests
-    ApproveResponse,    // approve a Tier 4/5 response
-    RejectResponse,     // reject a pending response
-    SetThreatLevel,     // manually set threat level
-
+    Ping,
+    QueryStatus,
+    QueryPending,
+    ApproveResponse,
+    RejectResponse,
+    SetThreatLevel,
     // AEGIS → HELENA
-    Pong,               // reply to ping
-    StatusReport,       // reply to QueryStatus
-    PendingReport,      // reply to QueryPending
-    Alert,              // unsolicited — threat detected
-    ThreatLevelChange,  // threat level escalated/de-escalated
-    ResponseExecuted,   // a response package was executed
-    Error,              // something went wrong on the AEGIS side
+    Pong,
+    StatusReport,
+    PendingReport,
+    Alert,
+    ThreatLevelChange,
+    ResponseExecuted,
+    Error,
 }
 
-// ── Typed payload structs ─────────────────────────────────────────────────────
-//
-// These are the actual data inside `payload` for each message kind.
-// Rust serialises/deserialises them via serde_json::Value.
-// Python just reads the JSON dict directly.
+// ── Typed payloads ────────────────────────────────────────────────────────────
 
-/// AEGIS → HELENA: current system state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusPayload {
     pub threat_level:      ThreatLevel,
@@ -157,27 +180,16 @@ pub struct StatusPayload {
     pub last_event_at:     Option<DateTime<Utc>>,
 }
 
-/// AEGIS → HELENA: a detected threat
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertPayload {
-    pub agent_id:     String,
-    pub threat_level: ThreatLevel,
-    pub summary:      String,       // plain English for HELENA to surface
-    pub findings:     Vec<Finding>,
+    pub agent_id:      String,
+    pub threat_level:  ThreatLevel,
+    pub summary:       String,
+    pub findings:      Vec<Finding>,
     pub response_tier: ResponseTier,
-    pub package_id:   Option<String>, // set if Tier 4/5 pending approval
+    pub package_id:    Option<String>,
 }
 
-/// One finding from one agent
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Finding {
-    pub finding_type: String,
-    pub severity:     f32,          // 0.0 - 1.0
-    pub detail:       String,
-    pub data:         serde_json::Value,
-}
-
-/// HELENA → AEGIS: approve a pending response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovePayload {
     pub package_id:  String,
@@ -185,21 +197,18 @@ pub struct ApprovePayload {
     pub approved_by: String,
 }
 
-/// HELENA → AEGIS: reject a pending response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RejectPayload {
     pub package_id: String,
     pub reason:     String,
 }
 
-/// HELENA → AEGIS: override threat level
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetThreatPayload {
     pub level:  ThreatLevel,
     pub reason: String,
 }
 
-/// AEGIS → HELENA: error notification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorPayload {
     pub code:    String,
