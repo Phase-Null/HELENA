@@ -113,7 +113,7 @@ impl ProcessWatchdog {
     pub fn new(variant: u8, interval_secs: u64, threshold: f32) -> Self {
         // Create and seed the sysinfo System instance
         let mut sys = System::new_with_specifics(
-            RefreshKind::new().with_processes(ProcessRefreshKind::everything()),
+            RefreshKind::nothing().with_processes(ProcessRefreshKind::everything()),
         );
         sys.refresh_all();
 
