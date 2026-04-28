@@ -25,7 +25,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use sha2::{Sha256, Digest};
 
-use crate::agents::base::{Agent, AgentConfig, SharedContext};
+use crate::agents::base::{Agent, AgentConfig};
+use crate::ipc::protocol::SharedContext;
 use crate::ipc::protocol::Finding;
 
 // ── Watched directories and protected files ───────────────────────────────────
