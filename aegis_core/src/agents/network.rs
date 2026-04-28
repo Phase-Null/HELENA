@@ -20,7 +20,8 @@
 use std::collections::HashSet;
 use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
 
-use crate::agents::base::{Agent, AgentConfig, SharedContext};
+use crate::agents::base::{Agent, AgentConfig};
+use crate::ipc::protocol::SharedContext;
 use crate::ipc::protocol::Finding;
 
 // ── Known suspicious ports ────────────────────────────────────────────────────
