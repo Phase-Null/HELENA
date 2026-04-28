@@ -142,7 +142,7 @@ impl Agent for IntrusionDetection {
                     let count    = tracker.count(&source);
                     let existing = context.ip_severity(&source);
                     let base_sev = if is_brute { 0.8 } else { 0.4 };
-                    let severity = (base_sev + existing * 0.15).min(1.0);
+                    let severity = (base_sev + existing * 0.15_f32).min(1.0_f32);
 
                     findings.push(Finding {
                         finding_type: if is_brute {
