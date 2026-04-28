@@ -9,4 +9,4 @@ pub mod integrity;
 pub mod process;
 pub mod intrusion;
 
-pub use base::{Agent, AgentConfig, AgentReport, SharedContext, spawn_agent};
+pub use base::{Agent, AgentConfig, AgentReport, spawn_agent};
