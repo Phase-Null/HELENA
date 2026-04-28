@@ -22,7 +22,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::agents::base::{Agent, AgentConfig, SharedContext};
+use crate::agents::base::{Agent, AgentConfig};
+use crate::ipc::protocol::SharedContext;
 use crate::ipc::protocol::Finding;
 
 // ── Brute force tracker ───────────────────────────────────────────────────────
