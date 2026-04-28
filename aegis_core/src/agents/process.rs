@@ -25,7 +25,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use sysinfo::{System, ProcessesToUpdate, ProcessRefreshKind, RefreshKind};
 
-use crate::agents::base::{Agent, AgentConfig, SharedContext};
+use crate::agents::base::{Agent, AgentConfig};
+use crate::ipc::protocol::SharedContext;
 use crate::ipc::protocol::Finding;
 
 // ── Suspicious process names ──────────────────────────────────────────────────
