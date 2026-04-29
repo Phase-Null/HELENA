@@ -1,6 +1,6 @@
 [package]
 name    = "aegis-core"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Phase-Null"]
 description = "AEGIS — Adaptive Evolving Guardian and Intelligence System"
@@ -13,7 +13,7 @@ path = "src/main.rs"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# Serialization — IPC bridge
+# Serialization
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -28,7 +28,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2 = "0.10"
 hex  = "0.4"
 
-# Fast RW locks for SharedThreatContext
+# Fast RW locks
 parking_lot = "0.12"
 
 # Time
@@ -37,16 +37,17 @@ chrono = { version = "0.4", features = ["serde"] }
 # UUID
 uuid = { version = "1", features = ["v4"] }
 
-# Phase 1 — system monitoring (Windows + Linux + macOS)
-# sysinfo: processes, CPU usage, process names/paths
-sysinfo = "0.33"
-
-# Phase 1 — network connections with PID on Windows
-# uses GetExtendedTcpTable (iphlpapi) on Windows
-# uses NETLINK_INET_DIAG on Linux
+# Phase 1 — system monitoring
+sysinfo  = "0.33"
 netstat2 = "0.9"
 
-# Phase 6 crypto stubs (declared now so dependency tree is settled)
+# Phase 2 — ETW consumer (Windows only)
+# ferrisetw: safe Rust abstractions over Windows ETW consumer APIs
+# Only compiled on Windows — the cfg guards in etw/ handle other platforms
+[target.'cfg(target_os = "windows")'.dependencies]
+ferrisetw = "1"
+
+# Phase 6 crypto stubs
 aes-gcm          = "0.10"
 chacha20poly1305 = "0.10"
 hkdf             = "0.12"
