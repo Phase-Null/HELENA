@@ -39,7 +39,7 @@ pub struct RuleSet {
     /// IPs blocked via netsh — key is IP string
     blocked_ips:   Mutex<HashMap<String, String>>,   // ip → rule_name
     /// Ports blocked via WFP — key is port, value is WFP filter ID
-    blocked_ports: Mutex<HashMap<u16, u64>>,
+    blocked_ports: Mutex<HashMap<u16, ()>>,
 }
 
 impl RuleSet {
@@ -177,7 +177,7 @@ pub fn block_inbound_port(
     let txn = engine.transaction()
         .context("Failed to begin WFP transaction for port block")?;
 
-    let filter_id = FilterBuilder::default()
+    FilterBuilder::default()
         .name(&format!("HELENA Block Port {}", port))
         .description(&format!("HELENA blocked: {}", &reason[..reason.len().min(60)]))
         .action(ActionType::Block)
@@ -194,9 +194,9 @@ pub fn block_inbound_port(
         .context("Failed to commit WFP port block transaction")?;
 
     rule_set.blocked_ports.lock().unwrap()
-        .insert(port, filter_id);
+        .insert(port, ());
 
-    info!("Firewall: Blocked inbound port {} via WFP (id: {})", port, filter_id);
+    info!("Firewall: Blocked inbound port {} via WFP (id: {})", port);
     Ok(())
 }
 
