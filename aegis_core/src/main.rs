@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
             match FirewallEngine::open() {
                 Ok(engine) => {
                     info!("WFP: Firewall engine active");
-                    let mut responder = Responder::new(engine);
+                    let responder = Responder::new(engine);
                     run_firewall_thread(fw_rx, responder, state_for_fw);
                 }
                 Err(e) => {
