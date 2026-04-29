@@ -1,54 +1,28 @@
 [package]
 name    = "aegis-core"
-version = "0.3.0"
-edition = "2021"
+version = "0.4.0"
+edition = "2026"
 authors = ["Phase-Null"]
-description = "AEGIS — Adaptive Evolving Guardian and Intelligence System"
-
-[package.metadata.winres]
-MANIFEST = "aegis.exe.manifest"
+description = "AEGIS Security Core — HELENA defensive systems"
 
 [[bin]]
 name = "aegis"
 path = "src/main.rs"
 
 [dependencies]
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Serialization
+tokio      = { version = "1", features = ["full"] }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-
-# Error handling
-anyhow = "1"
-
-# Logging
+anyhow     = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# Crypto — file integrity hashing
-sha2 = "0.10"
-hex  = "0.4"
-
-# Fast RW locks
+sha2        = "0.10"
+hex         = "0.4"
 parking_lot = "0.12"
-
-# Time
-chrono = { version = "0.4", features = ["serde"] }
-
-# UUID
-uuid = { version = "1", features = ["v4"] }
-
-# Phase 1 — system monitoring
-sysinfo  = "0.33"
-netstat2 = "0.9"
-
-# Phase 2 — ETW consumer (Windows only)
-# ferrisetw: safe Rust abstractions over Windows ETW consumer APIs
-# Only compiled on Windows — the cfg guards in etw/ handle other platforms
-[target.'cfg(target_os = "windows")'.dependencies]
-ferrisetw = "1"
+chrono      = { version = "0.4", features = ["serde"] }
+uuid        = { version = "1", features = ["v4"] }
+sysinfo     = "0.33"
+netstat2    = "0.9"
 
 # Phase 6 crypto stubs
 aes-gcm          = "0.10"
@@ -56,11 +30,19 @@ chacha20poly1305 = "0.10"
 hkdf             = "0.12"
 rand             = "0.8"
 
+# Windows-only dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+# Phase 2 — ETW consumer
+ferrisetw = "1"
+# Phase 3 — WFP firewall (MIT OR Apache-2.0 license — clean for commercial use)
+# Note: do NOT use windows-wfp (lostyzen) — that one is GPL-2.0
+wfp = "0.0.3"
+
+[build-dependencies]
+winres = "0.1"
+
 [profile.release]
 opt-level     = 3
 lto           = true
 codegen-units = 1
 panic         = "abort"
-
-[build-dependencies]
-winres = "0.1"
