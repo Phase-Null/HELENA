@@ -174,7 +174,8 @@ fn build_kernel_process_trace(
     Ok(UserTrace::new()
         .named(String::from("aegis_kernel_process"))
         .enable(provider)
-        .start_and_process()?)
+        .start_and_process()
+        .map_err(|e| anyhow::anyhow!("ETW trace failed: {:?}", e))?)
 }
 
 // ── DNS-Client ────────────────────────────────────────────────────────────────
@@ -218,7 +219,8 @@ fn build_dns_trace(
     Ok(UserTrace::new()
         .named(String::from("aegis_dns_client"))
         .enable(provider)
-        .start_and_process()?)
+        .start_and_process()
+        .map_err(|e| anyhow::anyhow!("ETW trace failed: {:?}", e))?)
 }
 
 // ── Security-Auditing ─────────────────────────────────────────────────────────
@@ -251,7 +253,8 @@ fn build_security_auditing_trace(
     Ok(UserTrace::new()
         .named(String::from("aegis_security_auditing"))
         .enable(provider)
-        .start_and_process()?)
+        .start_and_process()
+        .map_err(|e| anyhow::anyhow!("ETW trace failed: {:?}", e))?)
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
