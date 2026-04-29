@@ -69,6 +69,11 @@ fn known_safe_processes() -> HashSet<&'static str> {
         "system", "idle", "registry",
         "runtimebroker.exe", "sihost.exe",
         "taskhostw.exe", "dwm.exe",
+        "protonvpn.wireguardservice.exe",
+        "protonvpn.exe",
+        "ubtservice.exe",
+        "opera.exe",
+        "opera_gx.exe",
     ].into()
 }
 
