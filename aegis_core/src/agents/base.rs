@@ -49,7 +49,7 @@ pub trait Agent: Send + Sync + 'static {
 
 // ── Agent report ──────────────────────────────────────────────────────────────
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AgentReport {
     pub agent_id:     String,
     pub threat_level: ThreatLevel,
