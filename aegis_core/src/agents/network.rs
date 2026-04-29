@@ -63,6 +63,11 @@ fn known_safe_processes() -> HashSet<&'static str> {
         "onedrive.exe",
         "explorer.exe",
         "searchhost.exe", "searchindexer.exe",
+        "protonvpn.wireguardservice.exe",
+        "protonvpn.exe",
+        "ubtservice.exe",
+        "opera.exe",
+        "opera_gx.exe",
     ].into()
 }
 
