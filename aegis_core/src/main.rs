@@ -1,30 +1,24 @@
 // src/main.rs
 //
-// AEGIS Phase 2 — ETW consumers + deduplication tuning.
+// AEGIS Phase 3 — WFP firewall + response engine.
 //
-// Adds to Phase 1:
-//   - ETW consumer for 3 providers (Kernel-Process, DNS-Client, Security-Auditing)
-//   - EtwHandles stored for process lifetime (drop = session stops)
-//   - Rate limiter in dispatch loop to suppress repeated polling noise
+// Adds to Phase 2:
+//   - FirewallEngine opened at startup (requires admin — already guaranteed by manifest)
+//   - Responder created from FirewallEngine, runs on its own std::thread
+//   - Firewall commands sent to Responder thread via std::sync::mpsc channel
+//   - Approved responses polled from AegisState and executed by Responder
+//   - Firewall summary added to HELENA status reports
 //
-// Deduplication design:
-//   ETW findings are event-driven — they fire exactly once per real event.
-//   They are NEVER rate-limited.
-//
-//   Phase 1 agent findings are polling — same agent fires every N seconds
-//   even if nothing changed. Rate limits per agent type:
-//     file_integrity:      0s  — never suppress. File changes are critical.
-//     intrusion_detection: 0s  — never suppress. Security events must reach HELENA.
-//     etw_*:               0s  — event-driven, no suppression needed.
-//     network_monitor:     15s — polling, suppress repeat reports.
-//     process_watchdog:    30s — noisiest poller, highest suppression.
-//
-//   This directly addresses the "78 findings every 5 seconds" problem from Phase 1.
+// Why std::thread for Responder and not tokio::spawn:
+//   FirewallEngine wraps a FilterEngine which is Send but not Sync.
+//   Tokio tasks can move between threads; std::thread gives us a fixed thread.
+//   All firewall operations go through a channel — no async needed on that side.
 
 mod ipc;
 mod state;
 mod agents;
 mod etw;
+mod firewall;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,14 +40,23 @@ use agents::{
     intrusion::IntrusionDetection,
 };
 use etw::start_etw_consumers;
+use firewall::{FirewallEngine, Responder};
 
-// ── Rate limit config (seconds) ───────────────────────────────────────────────
+// ── Rate limit config ─────────────────────────────────────────────────────────
 
 fn cooldown_for_agent(agent_id: &str) -> u64 {
-    if agent_id.starts_with("process_watchdog")    { return 30; }
-    if agent_id.starts_with("network_monitor")     { return 15; }
-    // file_integrity, intrusion_detection, etw_* — no cooldown
+    if agent_id.starts_with("process_watchdog") { return 30; }
+    if agent_id.starts_with("network_monitor")  { return 15; }
     0
+}
+
+// ── Firewall command channel ──────────────────────────────────────────────────
+// Sent from async dispatch loop → firewall thread
+
+enum FirewallCmd {
+    Respond(AgentReport),
+    ExecuteApproved,
+    Shutdown,
 }
 
 #[tokio::main]
@@ -67,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!("═══════════════════════════════════════");
-    info!("  AEGIS Security Core — Phase 2        ");
+    info!("  AEGIS Security Core — Phase 3        ");
     info!("  H.O.P.E. Project / HELENA Initiative ");
     info!("═══════════════════════════════════════");
 
@@ -82,7 +85,33 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // ── Shared report channel ──────────────────────────────────────────────────
+    // ── Firewall thread ────────────────────────────────────────────────────────
+    // Opens WFP engine, creates Responder, listens for commands.
+    // Runs on a dedicated OS thread — FirewallEngine is Send but not Sync.
+
+    let (fw_tx, fw_rx) = std::sync::mpsc::channel::<FirewallCmd>();
+    let state_for_fw   = Arc::clone(&state);
+
+    std::thread::Builder::new()
+        .name("aegis_firewall".to_string())
+        .spawn(move || {
+            match FirewallEngine::open() {
+                Ok(engine) => {
+                    info!("WFP: Firewall engine active");
+                    let mut responder = Responder::new(engine);
+                    run_firewall_thread(fw_rx, responder, state_for_fw);
+                }
+                Err(e) => {
+                    tracing::warn!("WFP: Firewall unavailable: {}. Detection continues without active blocking.", e);
+                    // Thread exits — fw_tx becomes effectively a dead channel
+                    // The dispatch loop handles send errors gracefully
+                }
+            }
+        })?;
+
+    let fw_tx = Arc::new(std::sync::Mutex::new(fw_tx));
+
+    // ── Report channel ─────────────────────────────────────────────────────────
 
     let (report_tx, mut report_rx) = mpsc::unbounded_channel::<AgentReport>();
 
@@ -111,40 +140,46 @@ async fn main() -> anyhow::Result<()> {
     for agent in agents {
         spawn_agent(agent, Arc::clone(&state), report_tx.clone());
     }
-
     {
         let mut s = state.lock().await;
         s.active_agent_count = agent_count;
     }
-
     info!("Spawned {} Phase 1 agents", agent_count);
 
-    // ── Phase 2: ETW consumers ─────────────────────────────────────────────────
-    // EtwHandles MUST be stored — dropping it stops all ETW sessions.
+    // ── Phase 2: ETW ───────────────────────────────────────────────────────────
 
-    let _etw_handles = start_etw_consumers(
-        Arc::clone(&state),
-        report_tx.clone(),
-    );
+    let _etw_handles = start_etw_consumers(Arc::clone(&state), report_tx.clone());
 
-    // ── Dispatch loop with rate limiting ───────────────────────────────────────
+    // ── Approved response poller ───────────────────────────────────────────────
+    // Checks every 5 seconds for operator-approved Tier 4-5 responses
+
+    let fw_tx_poller  = Arc::clone(&fw_tx);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(
+            tokio::time::Duration::from_secs(5)
+        );
+        loop {
+            interval.tick().await;
+            let lock = fw_tx_poller.lock().unwrap();
+            let _ = lock.send(FirewallCmd::ExecuteApproved);
+        }
+    });
+
+    // ── Dispatch loop ──────────────────────────────────────────────────────────
 
     let state_for_dispatch = Arc::clone(&state);
     let helena_tx_dispatch  = Arc::clone(&helena_tx);
+    let fw_tx_dispatch      = Arc::clone(&fw_tx);
 
     tokio::spawn(async move {
-        // last_sent: agent_id → Instant of last report forwarded to HELENA
         let mut last_sent: HashMap<String, Instant> = HashMap::new();
 
         while let Some(report) = report_rx.recv().await {
             let cooldown = cooldown_for_agent(&report.agent_id);
 
-            // Rate limit check
             if cooldown > 0 {
                 if let Some(last) = last_sent.get(&report.agent_id) {
                     if last.elapsed().as_secs() < cooldown {
-                        // Still within cooldown — write findings to state for
-                        // correlation but don't forward to HELENA
                         let mut s = state_for_dispatch.lock().await;
                         for f in &report.findings {
                             s.write_finding(&report.agent_id, f.clone());
@@ -155,7 +190,6 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // Update cooldown timestamp
             if cooldown > 0 {
                 last_sent.insert(report.agent_id.clone(), Instant::now());
             }
@@ -174,7 +208,13 @@ async fn main() -> anyhow::Result<()> {
                 s.escalate_if_higher(report.threat_level);
             }
 
-            // Forward to HELENA
+            // Send to firewall thread — ignore error if firewall unavailable
+            {
+                let lock = fw_tx_dispatch.lock().unwrap();
+                let _ = lock.send(FirewallCmd::Respond(report.clone()));
+            }
+
+            // Forward alert to HELENA
             let summary = report.findings.first()
                 .map(|f| f.detail.clone())
                 .unwrap_or_else(|| format!("Threat from {}", report.agent_id));
@@ -190,7 +230,6 @@ async fn main() -> anyhow::Result<()> {
                     "package_id":   null,
                 }),
             );
-
             let tx_lock = helena_tx_dispatch.lock().await;
             if let Some(tx) = tx_lock.as_ref() {
                 let _ = tx.send(alert);
@@ -200,7 +239,7 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Heartbeat ──────────────────────────────────────────────────────────────
 
-    let state_hb = Arc::clone(&state);
+    let state_hb     = Arc::clone(&state);
     let helena_tx_hb = Arc::clone(&helena_tx);
 
     tokio::spawn(async move {
@@ -232,12 +271,49 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    info!("AEGIS Phase 2 ready — {} agents + ETW consumers active", agent_count);
+    info!("AEGIS Phase 3 ready — {} agents, ETW, WFP firewall active", agent_count);
     info!("Waiting for HELENA on 127.0.0.1:47201");
 
     tokio::signal::ctrl_c().await?;
     info!("Shutdown signal received. AEGIS stopping.");
 
-    // _etw_handles dropped here — cleanly stops all ETW sessions
+    // Signal firewall thread to shut down cleanly
+    {
+        let lock = fw_tx.lock().unwrap();
+        let _ = lock.send(FirewallCmd::Shutdown);
+    }
+
     Ok(())
+}
+
+// ── Firewall thread loop ───────────────────────────────────────────────────────
+
+fn run_firewall_thread(
+    rx:        std::sync::mpsc::Receiver<FirewallCmd>,
+    mut responder: Responder,
+    state:     Arc<Mutex<AegisState>>,
+) {
+    // We need a tokio runtime handle to lock the async Mutex from sync thread
+    let rt = tokio::runtime::Handle::current();
+
+    loop {
+        match rx.recv() {
+            Ok(FirewallCmd::Respond(report)) => {
+                let mut s = rt.block_on(state.lock());
+                let actions = responder.respond(&report, &mut s);
+                for action in actions {
+                    info!("Firewall action: {}", action);
+                }
+            }
+            Ok(FirewallCmd::ExecuteApproved) => {
+                let mut s = rt.block_on(state.lock());
+                responder.execute_approved(&mut s);
+            }
+            Ok(FirewallCmd::Shutdown) | Err(_) => {
+                info!("Firewall thread shutting down");
+                responder.cleanup();
+                break;
+            }
+        }
+    }
 }
