@@ -34,7 +34,7 @@ use wfp::{FilterEngineBuilder, FilterEngine, Transaction, SubLayerBuilder};
 
 /// Sublayer weight — above Windows Firewall defaults (0x2710),
 /// below system-critical rules (0xFFFF).
-const HELENA_SUBLAYER_WEIGHT: u32 = 0x8000;
+const HELENA_SUBLAYER_WEIGHT: u16 = 0x8000;
 
 pub struct FirewallEngine {
     pub(crate) engine: FilterEngine,
