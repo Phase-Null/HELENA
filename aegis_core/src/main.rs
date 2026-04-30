@@ -91,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (fw_tx, fw_rx) = std::sync::mpsc::channel::<FirewallCmd>();
     let state_for_fw   = Arc::clone(&state);
+    let fw_rt_handle   = tokio::runtime::Handle::current();
 
     std::thread::Builder::new()
         .name("aegis_firewall".to_string())
@@ -99,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
                 Ok(engine) => {
                     info!("WFP: Firewall engine active");
                     let mut responder = Responder::new(engine);
-                    run_firewall_thread(fw_rx, responder, state_for_fw);
+                    run_firewall_thread(fw_rx, responder, state_for_fw, fw_rt_handle);
                 }
                 Err(e) => {
                     tracing::warn!("WFP: Firewall unavailable: {}. Detection continues without active blocking.", e);
@@ -292,6 +293,7 @@ fn run_firewall_thread(
     rx:        std::sync::mpsc::Receiver<FirewallCmd>,
     mut responder: Responder,
     state:     Arc<Mutex<AegisState>>,
+    rt:        tokio::runtime::Handle,
 ) {
     // We need a tokio runtime handle to lock the async Mutex from sync thread
     let rt = tokio::runtime::Handle::current();
