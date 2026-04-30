@@ -134,7 +134,16 @@ impl Responder {
                 }
 
                 // Queue Tier 4 package for critical findings
-                if finding.severity >= 0.9 {
+                if finding.severity >= 0.9
+                    && matches!(
+                        finding.finding_type.as_str(),
+                        "etw_suspicious_process_image"
+                      | "etw_suspicious_cmdline"
+                      | "brute_force_attempt"
+                      | "privilege_escalation"
+                      | "file_modified"
+                    )
+                {
                     let pkg = build_tier4_package(finding, agent_id);
                     let id  = pkg.package_id.clone();
                     state.add_pending(pkg);
