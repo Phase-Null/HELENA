@@ -295,8 +295,7 @@ fn run_firewall_thread(
     state:     Arc<Mutex<AegisState>>,
     rt:        tokio::runtime::Handle,
 ) {
-    // We need a tokio runtime handle to lock the async Mutex from sync thread
-    let rt = tokio::runtime::Handle::current();
+    // We need a tokio runtime handle to lock the async Mutex from sync thread, review
 
     loop {
         match rx.recv() {
