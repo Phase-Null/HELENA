@@ -196,7 +196,7 @@ pub fn block_inbound_port(
     rule_set.blocked_ports.lock().unwrap()
         .insert(port, ());
 
-    info!("Firewall: Blocked inbound port {} via WFP (id: {})", port);
+    info!("Firewall: Blocked inbound port {} via WFP ", port);
     Ok(())
 }
 
