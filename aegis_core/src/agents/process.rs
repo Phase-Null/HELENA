@@ -15,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use sysinfo::{System, ProcessesToUpdate, ProcessRefreshKind, RefreshKind};
 
-use crate::agents::base::{Agent, AgentConfig, SharedContext};
+use crate::agents::base::{Agent, AgentConfig};
+use crate::ipc::protocol::SharedContext;
 use crate::ipc::protocol::Finding;
 
 // ── Suspicious process names ──────────────────────────────────────────────────
@@ -235,7 +236,7 @@ impl Agent for ProcessWatchdog {
         let pid_to_name: HashMap<u32, String> = sys.processes()
             .iter()
             .map(|(pid, proc)| {
-                (*pid.as_u32(), proc.name().to_string_lossy().to_lowercase())
+                (pid.as_u32(), proc.name().to_string_lossy().to_lowercase())
             })
             .collect::<HashMap<_, _>>();
 
