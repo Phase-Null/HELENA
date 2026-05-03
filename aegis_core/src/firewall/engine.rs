@@ -10,7 +10,6 @@
 // All other logic unchanged from Phase 3.
 
 use std::io;
-use std::net::Ipv4Addr;
 use anyhow::{Context, Result};
 use tracing::info;
 
@@ -24,7 +23,6 @@ const HELENA_SUBLAYER_WEIGHT: u16 = 0x8000;
 
 /// Weight for loopback permit rules — higher than block rules so
 /// they take priority in WFP arbitration within our sublayer.
-const LOOPBACK_PERMIT_WEIGHT: u64 = 0xFFFF;
 
 pub struct FirewallEngine {
     pub(crate) engine: FilterEngine,
@@ -74,7 +72,6 @@ impl FirewallEngine {
             .description("Allow loopback-only access to AEGIS IPC port")
             .action(ActionType::Permit)
             .layer(Layer::InboundTransportV4)
-            .weight(LOOPBACK_PERMIT_WEIGHT)
             .condition(
                 PortConditionBuilder::local()
                     .equal(port)
