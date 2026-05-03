@@ -143,8 +143,6 @@ impl Responder {
                         | "brute_force_attempt"
                         | "privilege_escalation"
                         | "file_modified"
-                        | "process_masquerading"
-                        | "parent_child_mismatch"
                     )
                 {
                     let pkg = build_tier4_package(finding, agent_id);
