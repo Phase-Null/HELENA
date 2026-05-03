@@ -127,6 +127,84 @@ fn is_known_safe(name: &str, exe: &str) -> bool {
         "registry"          => true,
         "memory compression"=> true,
 
+        // Acer services
+        "aceragentservice.exe"      => exe_lower.contains("\\acer\\"),
+        "acerccagent.exe"           => exe_lower.contains("\\acer\\"),
+        "acerdiagent.exe"           => exe_lower.contains("\\acer\\"),
+        "acergaicameraw.exe"        => exe_lower.contains("\\acer\\"),
+        "acerpixyservice.exe"       => exe_lower.contains("\\acer\\"),
+        "acerqaagent.exe"           => exe_lower.contains("\\acer\\"),
+        "acersysmonitorservice.exe" => exe_lower.contains("\\acer\\"),
+        "adesv2svc.exe"             => exe_lower.contains("\\acer\\"),
+        "aqauserps.exe"             => exe_lower.contains("\\acer\\"),
+        "quickpanelosd.exe"         => exe_lower.contains("\\acer\\"),
+        "ubtservice.exe"            => exe_lower.contains("\\acer\\"),
+
+        // ProtonVPN additional
+        "protonvpn.client.exe"      => exe_lower.contains("\\protonvpn\\"),
+        "protonvpnservice.exe"      => exe_lower.contains("\\protonvpn\\"),
+
+        // Ollama (name has a space)
+        "ollama app.exe"            => exe_lower.contains("\\ollama\\")
+                                    || exe_lower.contains("program files"),
+
+        // Microsoft services
+        "msedgewebview2.exe"        => exe_lower.contains("\\microsoft\\")
+                                    || exe_lower.contains("\\edge\\"),
+        "onedrive.sync.service.exe" => exe_lower.contains("\\onedrive\\")
+                                    || exe_lower.contains("\\microsoft\\"),
+        "wudfhost.exe"              => exe_lower.starts_with("c:\\windows\\"),
+        "ipfsvc.exe"                => exe_lower.starts_with("c:\\windows\\"),
+        "edgegameassist.exe"        => exe_lower.contains("\\microsoft\\"),
+
+        // MC processes (Intel/McAfee network components)
+        "mc-fw-host.exe"            => exe_lower.contains("\\intel\\")
+                                    || exe_lower.contains("\\mcafee\\"),
+        "mc-extn-browserhost.exe"   => exe_lower.contains("\\intel\\")
+                                    || exe_lower.contains("\\mcafee\\"),
+        "mc-vpn.exe"                => exe_lower.contains("\\intel\\")
+                                    || exe_lower.contains("\\mcafee\\"),
+
+        // Chromium Embedded Framework (used by NitroSense and others)
+        "cefsharp.browsersubprocess.exe" => true, // path varies too much
+        "browserhost.exe"           => true,
+
+        // Windows Gaming
+        "gamingservices.exe"        => exe_lower.contains("\\windowsapps\\")
+                                    || exe_lower.contains("\\xbox\\"),
+        "gamingservicesnet.exe"     => exe_lower.contains("\\windowsapps\\")
+                                    || exe_lower.contains("\\xbox\\"),
+        "xboxpcappft.exe"           => exe_lower.contains("\\windowsapps\\")
+                                    || exe_lower.contains("\\xbox\\"),
+
+        // Additional Windows system
+        "hostappserviceupdater.exe" => exe_lower.contains("\\windows\\")
+                                    || exe_lower.contains("\\microsoft\\"),
+        "powershell.exe"            => exe_lower.starts_with("c:\\windows\\"),
+        "pwsh.exe"                  => exe_lower.contains("\\powershell\\"),
+        "cmd.exe"                   => exe_lower.starts_with("c:\\windows\\"),
+        "conhost.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "dllhost.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "audiodg.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "spoolsv.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "wmiprvse.exe"              => exe_lower.starts_with("c:\\windows\\"),
+        "lsaiso.exe"                => exe_lower.starts_with("c:\\windows\\"),
+        "smartscreen.exe"           => exe_lower.starts_with("c:\\windows\\"),
+        "msmpeng.exe"               => exe_lower.starts_with("c:\\windows\\")
+                                    || exe_lower.contains("\\defender\\"),
+        "nissrv.exe"                => exe_lower.starts_with("c:\\windows\\")
+                                    || exe_lower.contains("\\defender\\"),
+        "applicationframehost.exe"  => exe_lower.starts_with("c:\\windows\\"),
+        "backgroundtaskhost.exe"    => exe_lower.starts_with("c:\\windows\\"),
+        "ctfmon.exe"                => exe_lower.starts_with("c:\\windows\\"),
+        "dashost.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "shellexperiencehost.exe"   => exe_lower.starts_with("c:\\windows\\"),
+        "startmenuexperiencehost.exe" => exe_lower.starts_with("c:\\windows\\"),
+        "widgets.exe"               => exe_lower.starts_with("c:\\windows\\"),
+        "widgetservice.exe"         => exe_lower.starts_with("c:\\windows\\"),
+        "windowsterminal.exe"       => exe_lower.contains("\\windowsterminal\\")
+                                    || exe_lower.contains("\\windowsapps\\"),
+
         // Anything else is unknown
         _                   => false,
     }
