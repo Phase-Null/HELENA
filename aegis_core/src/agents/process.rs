@@ -370,7 +370,7 @@ impl Agent for ProcessWatchdog {
                 if is_system_name {
                     findings.push(Finding {
                         finding_type: "process_masquerading".to_string(),
-                        severity: 0.95,
+                        severity: 0.75,
                         detail: format!(
                             "System process name from unexpected path: {} at {} (PID {})",
                             name, exe, pid
@@ -392,7 +392,7 @@ impl Agent for ProcessWatchdog {
                     if !expected.contains(&parent_name) {
                         findings.push(Finding {
                             finding_type: "parent_child_mismatch".to_string(),
-                            severity: 0.9,
+                            severity: 0.7,
                             detail: format!(
                                 "Parent PID spoofing: {} (PID {}) spawned by {} instead of {:?}",
                                 name, pid, parent_name, expected
