@@ -55,7 +55,6 @@ fn is_known_safe(name: &str, exe: &str) -> bool {
     match name {
     // Catch all Steam games — any exe from the Steam apps folder
     _ if exe_lower.contains("\\steamapps\\") => true,
-    _ if exe_lower.contains("\\steamapps\\") => true,
         
         // Browsers
         "chrome.exe"        => exe_lower.contains("\\google\\chrome\\application\\"),
