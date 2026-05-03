@@ -2,73 +2,103 @@
 //
 // Type A — Network Monitor
 //
-// Watches active TCP connections for suspicious activity:
-//   - Connections to known bad ports (reverse shells, RATs, etc.)
-//   - Established connections from processes AEGIS doesn't recognise
-//   - Unusual connection counts from a single process
-//
-// Uses the `netstat2` crate which calls GetExtendedTcpTable on Windows.
-// This gives us remote IP, remote port, local port, and the PID that
-// owns the connection — all in one call, no admin rights needed.
-//
-// Four variants with different scan intervals and thresholds:
-//   V1 — sensitive, fast  (5s, threshold 0.3)
-//   V2 — balanced         (10s, threshold 0.5)
-//   V3 — conservative     (20s, threshold 0.7)
-//   V4 — rapid sweep      (3s, threshold 0.4)
+// Phase 3a changes:
+//   - known_safe_processes() replaced with is_known_safe(name, exe)
+//     validating both name AND executable path. Closes T1036 masquerading
+//     gap for network-facing processes.
 
 use std::collections::HashSet;
 use netstat2::{get_sockets_info, AddressFamilyFlags, ProtocolFlags, ProtocolSocketInfo};
+use sysinfo::{System, ProcessesToUpdate, ProcessRefreshKind};
 
-use crate::agents::base::{Agent, AgentConfig};
-use crate::ipc::protocol::SharedContext;
+use crate::agents::base::{Agent, AgentConfig, SharedContext};
 use crate::ipc::protocol::Finding;
 
 // ── Known suspicious ports ────────────────────────────────────────────────────
 
-/// Ports commonly used by reverse shells, RATs, and C2 frameworks.
-/// Not exhaustive — flagged as elevated, not critical, on their own.
 fn suspicious_ports() -> HashSet<u16> {
     [
-        4444, 4445, 4446,       // Metasploit default reverse shell
-        5555, 5556,             // Android ADB, also common RAT port
-        6666, 6667, 6668,       // IRC (used by botnets), also common RAT
-        7777, 8888,             // Generic RAT ports
-        31337,                  // "Elite" — classic backdoor port
-        1337,                   // Common in CTF-style tools
-        9001, 9030, 9050, 9051, // Tor
-        1080,                   // SOCKS proxy — tunnelling indicator
-        3389,                   // RDP — external RDP is suspicious
-        4899,                   // Radmin remote admin
-        5900, 5901,             // VNC
+        4444, 4445, 4446,
+        5555, 5556,
+        6666, 6667, 6668,
+        7777, 8888,
+        31337, 1337,
+        9001, 9030, 9050, 9051,
+        1080,
+        3389,
+        4899,
+        5900, 5901,
     ].into()
 }
 
-/// Processes we expect to make network connections.
-/// Unknown processes making external connections get flagged.
-fn known_safe_processes() -> HashSet<&'static str> {
-    [
-        "chrome.exe", "firefox.exe", "msedge.exe", "brave.exe",
-        "python.exe", "pythonw.exe",
-        "ollama.exe", "ollama_llama_server.exe",
-        "aegis.exe",
-        "svchost.exe", "lsass.exe", "services.exe",
-        "system", "idle",
-        "discord.exe", "slack.exe",
-        "git.exe", "ssh.exe",
-        "curl.exe", "wget.exe",
-        "opera.exe", "opera_gx.exe",
-        "steam.exe", "steamwebhelper.exe",
-        "discord.exe",
-        "onedrive.exe",
-        "explorer.exe",
-        "searchhost.exe", "searchindexer.exe",
-        "protonvpn.wireguardservice.exe",
-        "protonvpn.exe",
-        "ubtservice.exe",
-        "opera.exe",
-        "opera_gx.exe",
-    ].into()
+// ── Path-validated safe process check ────────────────────────────────────────
+//
+// Validates both the process name AND the executable path.
+// Prevents T1036 masquerading — a spoofed chrome.exe from AppData
+// fails the path check even though the name matches.
+
+fn is_known_safe(name: &str, exe: &str) -> bool {
+    let exe_lower = exe.to_lowercase();
+    match name {
+        // Browsers
+        "chrome.exe"        => exe_lower.contains("\\google\\chrome\\application\\"),
+        "msedge.exe"        => exe_lower.contains("\\microsoft\\edge\\application\\"),
+        "firefox.exe"       => exe_lower.contains("\\mozilla firefox\\"),
+        "opera.exe"         => exe_lower.contains("\\opera gx\\") || exe_lower.contains("\\opera\\"),
+        "opera_gx.exe"      => exe_lower.contains("\\opera gx\\"),
+        "brave.exe"         => exe_lower.contains("\\brave software\\"),
+
+        // Development
+        "code.exe"          => exe_lower.contains("\\microsoft vs code\\")
+                            || exe_lower.contains("\\vscode\\"),
+        "python.exe"        => exe_lower.contains("\\python") || exe_lower.contains("\\miniconda"),
+        "pythonw.exe"       => exe_lower.contains("\\python") || exe_lower.contains("\\miniconda"),
+        "git.exe"           => exe_lower.contains("\\git\\"),
+        "node.exe"          => exe_lower.contains("\\nodejs\\") || exe_lower.contains("\\node\\"),
+        "cargo.exe"         => exe_lower.contains("\\.cargo\\"),
+
+        // HELENA stack
+        "ollama.exe"        => exe_lower.contains("\\ollama\\")
+                            || exe_lower.contains("program files"),
+        "ollama_llama_server.exe" => exe_lower.contains("\\ollama\\")
+                            || exe_lower.contains("program files"),
+        "aegis.exe"         => exe_lower.contains("\\helena\\") || exe_lower.contains("\\aegis"),
+
+        // Windows system — strict paths
+        "svchost.exe"       => exe_lower.starts_with("c:\\windows\\system32\\")
+                            || exe_lower.starts_with("c:\\windows\\syswow64\\"),
+        "lsass.exe"         => exe_lower.starts_with("c:\\windows\\system32\\"),
+        "services.exe"      => exe_lower.starts_with("c:\\windows\\system32\\"),
+        "explorer.exe"      => exe_lower.starts_with("c:\\windows\\"),
+
+        // VPN
+        "protonvpn.exe"     => exe_lower.contains("\\protonvpn\\"),
+        "protonvpn.wireguardservice.exe" => exe_lower.contains("\\protonvpn\\"),
+        "wireguard.exe"     => exe_lower.contains("\\wireguard\\"),
+
+        // Gaming/comms
+        "steam.exe"         => exe_lower.contains("\\steam\\"),
+        "steamwebhelper.exe"=> exe_lower.contains("\\steam\\"),
+        "discord.exe"       => exe_lower.contains("\\discord\\"),
+        "spotify.exe"       => exe_lower.contains("\\spotify\\"),
+
+        // OEM
+        "nitrosense.exe"    => exe_lower.contains("\\acer\\") || exe_lower.contains("windowsapps"),
+        "ubtservice.exe"    => exe_lower.contains("\\acer\\"),
+
+        // Utilities
+        "onedrive.exe"      => exe_lower.contains("\\onedrive\\"),
+        "ssh.exe"           => exe_lower.contains("\\openssh\\")
+                            || exe_lower.starts_with("c:\\windows\\system32\\"),
+        "curl.exe"          => exe_lower.starts_with("c:\\windows\\system32\\")
+                            || exe_lower.contains("\\curl\\"),
+
+        // Safe regardless of path
+        "system"            => true,
+        "idle"              => true,
+
+        _                   => false,
+    }
 }
 
 // ── Agent struct ──────────────────────────────────────────────────────────────
@@ -76,7 +106,6 @@ fn known_safe_processes() -> HashSet<&'static str> {
 pub struct NetworkMonitor {
     config:           AgentConfig,
     suspicious_ports: HashSet<u16>,
-    safe_processes:   HashSet<&'static str>,
 }
 
 impl NetworkMonitor {
@@ -84,11 +113,9 @@ impl NetworkMonitor {
         Self {
             config:           AgentConfig::new("network_monitor", variant, interval_secs, threshold),
             suspicious_ports: suspicious_ports(),
-            safe_processes:   known_safe_processes(),
         }
     }
 
-    /// Shorthand constructors for the four variants.
     pub fn v1() -> Self { Self::new(1, 5,  0.3) }
     pub fn v2() -> Self { Self::new(2, 10, 0.5) }
     pub fn v3() -> Self { Self::new(3, 20, 0.7) }
@@ -101,14 +128,12 @@ impl Agent for NetworkMonitor {
     fn scan(&self, context: &SharedContext) -> Vec<Finding> {
         let mut findings = Vec::new();
 
-        // GetExtendedTcpTable / equivalent via netstat2
         let sockets = match get_sockets_info(
             AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6,
             ProtocolFlags::TCP,
         ) {
             Ok(s)  => s,
             Err(e) => {
-                // Permission error or API failure — not a finding, just skip
                 tracing::debug!("NetworkMonitor: socket enumeration failed: {}", e);
                 return findings;
             }
@@ -117,39 +142,23 @@ impl Agent for NetworkMonitor {
         for sock in &sockets {
             let (local_port, remote_addr, remote_port, pid) = match &sock.protocol_socket_info {
                 ProtocolSocketInfo::Tcp(tcp) => {
-                    // Only care about ESTABLISHED connections
-                    // netstat2 includes LISTEN sockets too, skip those
                     if tcp.remote_port == 0 { continue; }
-                    (
-                        tcp.local_port,
-                        tcp.remote_addr.to_string(),
-                        tcp.remote_port,
-                        sock.associated_pids.first().copied(),
-                    )
+                    (tcp.local_port, tcp.remote_addr.to_string(),
+                     tcp.remote_port, sock.associated_pids.first().copied())
                 }
                 _ => continue,
             };
 
-            // Skip loopback — internal comms are expected
-            if remote_addr.starts_with("127.") || remote_addr == "::1" {
-                continue;
-            }
+            if remote_addr.starts_with("127.") || remote_addr == "::1" { continue; }
 
             let pid = pid.unwrap_or(0);
+            let (process_name, exe_path) = get_process_info(pid);
 
-            // Get process name for this PID (best effort)
-            let process_name = get_process_name(pid)
-                .unwrap_or_else(|| "unknown".to_string())
-                .to_lowercase();
-
-            // ── Check 1: suspicious remote port ──────────────────────────────
+            // ── Check 1: suspicious port ──────────────────────────────────────
             if self.suspicious_ports.contains(&remote_port)
                 || self.suspicious_ports.contains(&local_port) {
 
-                // Correlate: is this IP already flagged by another agent?
                 let existing = context.ip_severity(&remote_addr);
-
-                // Base severity 0.7, boosted if already flagged elsewhere
                 let severity = (0.7_f32 + existing * 0.2).min(1.0);
 
                 findings.push(Finding {
@@ -160,22 +169,18 @@ impl Agent for NetworkMonitor {
                         remote_port, remote_addr, pid, process_name
                     ),
                     data: serde_json::json!({
-                        "remote_ip":    remote_addr,
-                        "remote_port":  remote_port,
-                        "local_port":   local_port,
-                        "pid":          pid,
-                        "process":      process_name,
+                        "remote_ip":   remote_addr,
+                        "remote_port": remote_port,
+                        "local_port":  local_port,
+                        "pid":         pid,
+                        "process":     process_name,
                     }),
                 });
             }
 
-            // ── Check 2: unknown process making external connection ────────────
-            let base_name = process_name.split(['/', '\\']).last()
-                .unwrap_or(&process_name)
-                .to_string();
-
-            if !self.safe_processes.contains(base_name.as_str()) && pid > 4 {
-                // Correlate: is this PID already flagged?
+            // ── Check 2: unknown process with external connection ─────────────
+            // Uses path-validated check — spoofed names fail here
+            if !is_known_safe(&process_name, &exe_path) && pid > 4 {
                 let existing_pid = context.pid_severity(pid);
                 let severity = (0.35_f32 + existing_pid * 0.3).min(0.9);
 
@@ -191,6 +196,7 @@ impl Agent for NetworkMonitor {
                         "remote_port": remote_port,
                         "pid":         pid,
                         "process":     process_name,
+                        "exe":         exe_path,
                     }),
                 });
             }
@@ -200,23 +206,25 @@ impl Agent for NetworkMonitor {
     }
 }
 
-// ── Process name lookup ───────────────────────────────────────────────────────
-// sysinfo is the right tool for this on Windows.
-// We do a targeted single-process refresh rather than refreshing all processes
-// (much faster when we only need one name).
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn get_process_name(pid: u32) -> Option<String> {
-    use sysinfo::{System, ProcessesToUpdate, ProcessRefreshKind};
-
-    if pid == 0 { return None; }
+fn get_process_info(pid: u32) -> (String, String) {
+    if pid == 0 { return ("unknown".to_string(), String::new()); }
 
     let mut sys = System::new();
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
         true,
-        ProcessRefreshKind::nothing(),
+        ProcessRefreshKind::everything(),
     );
 
-    sys.process(sysinfo::Pid::from_u32(pid))
-        .map(|p| p.name().to_string_lossy().to_string())
+    if let Some(proc) = sys.process(sysinfo::Pid::from_u32(pid)) {
+        let name = proc.name().to_string_lossy().to_lowercase();
+        let exe  = proc.exe()
+            .map(|p| p.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        (name, exe)
+    } else {
+        ("unknown".to_string(), String::new())
+    }
 }
