@@ -1,16 +1,19 @@
 // src/state.rs
 //
-// Central shared state of AEGIS.
-// Unchanged from Phase 0 except for one addition:
-//   snapshot_context() — creates a lightweight read-only context snapshot
-//   that agents use for correlation without holding the lock during their scan.
+// Phase 3a change:
+//   - add_pending() now enforces a 50-item cap on pending_responses.
+//     If the queue is full, the oldest non-approved entry is dropped
+//     before the new one is added. This prevents queue flooding attacks
+//     where a compromised process generates thousands of fake findings
+//     to exhaust memory and hide real threats.
 
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::ipc::protocol::{Finding, ResponseTier, ThreatLevel};
-use crate::ipc::protocol::SharedContext;
+use crate::ipc::protocol::{Finding, ResponseTier, ThreatLevel, SharedContext};
+
+const MAX_PENDING_RESPONSES: usize = 50;
 
 // ── Pending response package ───────────────────────────────────────────────────
 
@@ -75,11 +78,7 @@ impl AegisState {
         (Utc::now() - self.started_at).num_seconds().max(0) as u64
     }
 
-    // ── Snapshot for agent correlation ────────────────────────────────────────
-    //
-    // Called just before spawning each agent scan.
-    // Builds a cheap read-only summary from the threat context so agents
-    // can correlate without holding the async Mutex during blocking I/O.
+    // ── Snapshot ──────────────────────────────────────────────────────────────
 
     pub fn snapshot_context(&self) -> SharedContext {
         let mut flagged_ips:   Vec<(String, f32)> = Vec::new();
@@ -91,38 +90,30 @@ impl AegisState {
             let data = &entry.finding.data;
 
             if let Some(ip) = data.get("remote_ip").and_then(|v| v.as_str()) {
-                // Merge: keep highest severity per IP
-                if let Some(existing) = flagged_ips.iter_mut().find(|(i, _)| i == ip) {
-                    existing.1 = existing.1.max(sev);
+                if let Some(e) = flagged_ips.iter_mut().find(|(i, _)| i == ip) {
+                    e.1 = e.1.max(sev);
                 } else {
                     flagged_ips.push((ip.to_string(), sev));
                 }
             }
-
             if let Some(pid) = data.get("pid").and_then(|v| v.as_u64()) {
                 let pid = pid as u32;
-                if let Some(existing) = flagged_pids.iter_mut().find(|(p, _)| *p == pid) {
-                    existing.1 = existing.1.max(sev);
+                if let Some(e) = flagged_pids.iter_mut().find(|(p, _)| *p == pid) {
+                    e.1 = e.1.max(sev);
                 } else {
                     flagged_pids.push((pid, sev));
                 }
             }
-
             if let Some(path) = data.get("path").and_then(|v| v.as_str()) {
-                if let Some(existing) = flagged_paths.iter_mut().find(|(p, _)| p == path) {
-                    existing.1 = existing.1.max(sev);
+                if let Some(e) = flagged_paths.iter_mut().find(|(p, _)| p == path) {
+                    e.1 = e.1.max(sev);
                 } else {
                     flagged_paths.push((path.to_string(), sev));
                 }
             }
         }
 
-        SharedContext {
-            flagged_ips,
-            flagged_pids,
-            flagged_paths,
-            threat_level: self.threat_level,
-        }
+        SharedContext { flagged_ips, flagged_pids, flagged_paths, threat_level: self.threat_level }
     }
 
     // ── Threat context ────────────────────────────────────────────────────────
@@ -144,7 +135,6 @@ impl AegisState {
         self.events_processed += 1;
         self.last_event_at = Some(Utc::now());
 
-        // Prune entries older than 1 hour
         let cutoff = Utc::now() - chrono::Duration::hours(1);
         self.threat_context.retain(|_, v| v.written_at > cutoff);
     }
@@ -161,14 +151,9 @@ impl AegisState {
     }
 
     pub fn highest_severity_for_ip(&self, ip: &str) -> f32 {
-        self.threat_context
-            .values()
-            .filter(|e| {
-                e.finding.data.get("remote_ip")
-                    .and_then(|v| v.as_str())
-                    .map(|v| v == ip)
-                    .unwrap_or(false)
-            })
+        self.threat_context.values()
+            .filter(|e| e.finding.data.get("remote_ip")
+                .and_then(|v| v.as_str()).map(|v| v == ip).unwrap_or(false))
             .map(|e| e.finding.severity)
             .fold(0.0_f32, f32::max)
     }
@@ -190,7 +175,36 @@ impl AegisState {
 
     // ── Response packages ─────────────────────────────────────────────────────
 
+    /// Add a pending response package.
+    /// Enforces a cap of MAX_PENDING_RESPONSES (50).
+    /// If full, drops the oldest unapproved entry to make room.
+    /// This prevents queue flooding attacks.
     pub fn add_pending(&mut self, pkg: ResponsePackage) {
+        if self.pending_responses.len() >= MAX_PENDING_RESPONSES {
+            // Find oldest unapproved entry to drop
+            let oldest_key = self.pending_responses.iter()
+                .filter(|(_, p)| !p.approved)
+                .min_by_key(|(_, p)| p.created_at)
+                .map(|(k, _)| k.clone());
+
+            if let Some(key) = oldest_key {
+                let dropped = self.pending_responses.remove(&key);
+                if let Some(pkg) = dropped {
+                    tracing::warn!(
+                        "Pending queue full ({}) — dropped oldest: {}",
+                        MAX_PENDING_RESPONSES, pkg.package_id
+                    );
+                    self.archive_response(pkg);
+                }
+            } else {
+                // All entries are approved and waiting execution — don't drop any
+                tracing::warn!(
+                    "Pending queue full ({}) — all approved, skipping new entry {}",
+                    MAX_PENDING_RESPONSES, pkg.package_id
+                );
+                return;
+            }
+        }
         self.pending_responses.insert(pkg.package_id.clone(), pkg);
     }
 
@@ -201,23 +215,18 @@ impl AegisState {
             pkg.approved_at = Some(Utc::now());
             pkg.reason_code = Some(reason.to_string());
             true
-        } else {
-            false
-        }
+        } else { false }
     }
 
     pub fn reject_response(&mut self, package_id: &str) -> bool {
         if let Some(pkg) = self.pending_responses.remove(package_id) {
             self.archive_response(pkg);
             true
-        } else {
-            false
-        }
+        } else { false }
     }
 
     pub fn take_approved(&mut self) -> Vec<ResponsePackage> {
-        let approved: Vec<String> = self.pending_responses
-            .iter()
+        let approved: Vec<String> = self.pending_responses.iter()
             .filter(|(_, p)| p.approved)
             .map(|(k, _)| k.clone())
             .collect();
