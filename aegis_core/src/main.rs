@@ -1,18 +1,14 @@
 // src/main.rs
 //
-// AEGIS Phase 3 — WFP firewall + response engine.
+// AEGIS Phase 3a — Security hardening additions.
 //
-// Adds to Phase 2:
-//   - FirewallEngine opened at startup (requires admin — already guaranteed by manifest)
-//   - Responder created from FirewallEngine, runs on its own std::thread
-//   - Firewall commands sent to Responder thread via std::sync::mpsc channel
-//   - Approved responses polled from AegisState and executed by Responder
-//   - Firewall summary added to HELENA status reports
-//
-// Why std::thread for Responder and not tokio::spawn:
-//   FirewallEngine wraps a FilterEngine which is Send but not Sync.
-//   Tokio tasks can move between threads; std::thread gives us a fixed thread.
-//   All firewall operations go through a channel — no async needed on that side.
+// Adds to Phase 3:
+//   - Port 47201 self-protection: WFP rule blocking external access to
+//     AEGIS's IPC port at startup. Loopback (127.0.0.1) remains open.
+//     Prevents external processes from connecting and sending commands.
+//   - ETW heartbeat monitoring: checks every 60 seconds that each ETW
+//     session is still delivering events. Silence for >60s = alert.
+//     Catches ETW tampering (T1562) and session crashes.
 
 mod ipc;
 mod state;
@@ -42,6 +38,8 @@ use agents::{
 use etw::start_etw_consumers;
 use firewall::{FirewallEngine, Responder};
 
+const AEGIS_IPC_PORT: u16 = 47201;
+
 // ── Rate limit config ─────────────────────────────────────────────────────────
 
 fn cooldown_for_agent(agent_id: &str) -> u64 {
@@ -51,7 +49,6 @@ fn cooldown_for_agent(agent_id: &str) -> u64 {
 }
 
 // ── Firewall command channel ──────────────────────────────────────────────────
-// Sent from async dispatch loop → firewall thread
 
 enum FirewallCmd {
     Respond(AgentReport),
@@ -70,7 +67,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     info!("═══════════════════════════════════════");
-    info!("  AEGIS Security Core — Phase 3        ");
+    info!("  AEGIS Security Core — Phase 3a       ");
     info!("  H.O.P.E. Project / HELENA Initiative ");
     info!("═══════════════════════════════════════");
 
@@ -86,8 +83,6 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // ── Firewall thread ────────────────────────────────────────────────────────
-    // Opens WFP engine, creates Responder, listens for commands.
-    // Runs on a dedicated OS thread — FirewallEngine is Send but not Sync.
 
     let (fw_tx, fw_rx) = std::sync::mpsc::channel::<FirewallCmd>();
     let state_for_fw   = Arc::clone(&state);
@@ -100,12 +95,24 @@ async fn main() -> anyhow::Result<()> {
                 Ok(engine) => {
                     info!("WFP: Firewall engine active");
                     let mut responder = Responder::new(engine);
+
+                    // ── Port 47201 self-protection ─────────────────────────────
+                    // Block all inbound connections to AEGIS's IPC port from
+                    // non-loopback addresses. Only 127.0.0.1 should ever connect.
+                    // This prevents external processes from sending fake commands.
+                    if let Err(e) = protect_ipc_port(&mut responder) {
+                        tracing::warn!("WFP: Could not protect IPC port: {}", e);
+                    } else {
+                        info!("WFP: IPC port {} protected (loopback only)", AEGIS_IPC_PORT);
+                    }
+
                     run_firewall_thread(fw_rx, responder, state_for_fw, fw_rt_handle);
                 }
                 Err(e) => {
-                    tracing::warn!("WFP: Firewall unavailable: {}. Detection continues without active blocking.", e);
-                    // Thread exits — fw_tx becomes effectively a dead channel
-                    // The dispatch loop handles send errors gracefully
+                    tracing::warn!(
+                        "WFP: Firewall unavailable: {}. Detection continues without blocking.",
+                        e
+                    );
                 }
             }
         })?;
@@ -149,12 +156,60 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Phase 2: ETW ───────────────────────────────────────────────────────────
 
-    let _etw_handles = start_etw_consumers(Arc::clone(&state), report_tx.clone());
+    let etw_handles = start_etw_consumers(Arc::clone(&state), report_tx.clone());
+
+    // ── ETW heartbeat monitor ──────────────────────────────────────────────────
+    // Checks every 60 seconds that ETW sessions are still alive.
+    // If a session goes silent, it may have been tampered with (T1562)
+    // or crashed. Either way, we alert.
+    // etw_handles.last_event_times is a shared map of provider → last event Instant.
+
+    let report_tx_heartbeat = report_tx.clone();
+    let heartbeat_times = etw_handles.last_event_times.clone();
+
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(
+            tokio::time::Duration::from_secs(60)
+        );
+        interval.tick().await; // skip immediate first tick — give ETW time to start
+
+        loop {
+            interval.tick().await;
+
+            let times = heartbeat_times.lock().unwrap();
+            for (provider, last_event) in times.iter() {
+                let silence = last_event.elapsed().as_secs();
+                if silence > 60 {
+                    tracing::warn!(
+                        "ETW HEARTBEAT: {} has been silent for {}s — possible tampering or crash",
+                        provider, silence
+                    );
+                    // Push as a finding so it surfaces in HELENA
+                    let _ = report_tx_heartbeat.send(AgentReport {
+                        agent_id:     format!("etw_heartbeat_{}", provider),
+                        threat_level: crate::ipc::protocol::ThreatLevel::Active,
+                        findings:     vec![crate::ipc::protocol::Finding {
+                            finding_type: "etw_session_silent".to_string(),
+                            severity:     0.8,
+                            detail: format!(
+                                "ETW provider {} has been silent for {}s. \
+                                 Possible ETW tampering (T1562) or session crash.",
+                                provider, silence
+                            ),
+                            data: serde_json::json!({
+                                "provider":   provider,
+                                "silence_secs": silence,
+                            }),
+                        }],
+                    });
+                }
+            }
+        }
+    });
 
     // ── Approved response poller ───────────────────────────────────────────────
-    // Checks every 5 seconds for operator-approved Tier 4-5 responses
 
-    let fw_tx_poller  = Arc::clone(&fw_tx);
+    let fw_tx_poller = Arc::clone(&fw_tx);
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(
             tokio::time::Duration::from_secs(5)
@@ -200,7 +255,6 @@ async fn main() -> anyhow::Result<()> {
                 report.agent_id, report.threat_level, report.findings.len()
             );
 
-            // Write to shared state
             {
                 let mut s = state_for_dispatch.lock().await;
                 for f in &report.findings {
@@ -209,13 +263,11 @@ async fn main() -> anyhow::Result<()> {
                 s.escalate_if_higher(report.threat_level);
             }
 
-            // Send to firewall thread — ignore error if firewall unavailable
             {
                 let lock = fw_tx_dispatch.lock().unwrap();
                 let _ = lock.send(FirewallCmd::Respond(report.clone()));
             }
 
-            // Forward alert to HELENA
             let summary = report.findings.first()
                 .map(|f| f.detail.clone())
                 .unwrap_or_else(|| format!("Threat from {}", report.agent_id));
@@ -238,7 +290,7 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // ── Heartbeat ──────────────────────────────────────────────────────────────
+    // ── Heartbeat to HELENA ────────────────────────────────────────────────────
 
     let state_hb     = Arc::clone(&state);
     let helena_tx_hb = Arc::clone(&helena_tx);
@@ -272,13 +324,15 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    info!("AEGIS Phase 3 ready — {} agents, ETW, WFP firewall active", agent_count);
-    info!("Waiting for HELENA on 127.0.0.1:47201");
+    info!("AEGIS Phase 3a ready — {} agents, ETW, WFP firewall, self-protection active", agent_count);
+    info!("Waiting for HELENA on 127.0.0.1:{}", AEGIS_IPC_PORT);
+
+    // Keep ETW handles alive for process lifetime
+    let _etw = etw_handles;
 
     tokio::signal::ctrl_c().await?;
     info!("Shutdown signal received. AEGIS stopping.");
 
-    // Signal firewall thread to shut down cleanly
     {
         let lock = fw_tx.lock().unwrap();
         let _ = lock.send(FirewallCmd::Shutdown);
@@ -287,16 +341,22 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ── Port self-protection ───────────────────────────────────────────────────────
+
+/// Add a WFP rule blocking all inbound connections to port 47201
+/// from non-loopback addresses. Called once at startup.
+fn protect_ipc_port(responder: &mut Responder) -> anyhow::Result<()> {
+    responder.block_port_external_only(AEGIS_IPC_PORT, "AEGIS IPC self-protection")
+}
+
 // ── Firewall thread loop ───────────────────────────────────────────────────────
 
 fn run_firewall_thread(
-    rx:        std::sync::mpsc::Receiver<FirewallCmd>,
+    rx:            std::sync::mpsc::Receiver<FirewallCmd>,
     mut responder: Responder,
-    state:     Arc<Mutex<AegisState>>,
-    rt:        tokio::runtime::Handle,
+    state:         Arc<Mutex<AegisState>>,
+    rt:            tokio::runtime::Handle,
 ) {
-    // We need a tokio runtime handle to lock the async Mutex from sync thread, review
-
     loop {
         match rx.recv() {
             Ok(FirewallCmd::Respond(report)) => {
