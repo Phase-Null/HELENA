@@ -148,7 +148,7 @@ def main():
     print(output)
 
     out_path = Path("whitelist_output.txt")
-    out_path.write_text(output)
+    out_path.write_text(output, encoding='utf-8')
     print(f"\nAlso saved to: {out_path.resolve()}")
     print("\nReview the output carefully before pasting into your Rust files.")
     print("Remove any entries that look unfamiliar or suspicious.")
