@@ -1,22 +1,18 @@
 // src/etw/consumer.rs
 //
-// ETW consumer using ferrisetw 1.x.
+// Phase 3a change:
+//   EtwHandles gains a last_event_times field — a shared map of
+//   provider name → Instant of last event received. main.rs reads
+//   this every 60 seconds. If any provider has been silent for >60s
+//   while the system is active, the heartbeat monitor fires an alert.
+//   This catches ETW tampering (T1562) and session crashes.
 //
-// ferrisetw 1.x API — verified against docs:
-//   - start_and_process() spawns ferrisetw's own internal thread and RETURNS
-//     a trace handle. We do NOT wrap in std::thread::spawn.
-//   - The returned handle MUST be kept alive. Drop = session stops.
-//     EtwHandles holds them. main.rs stores EtwHandles for the process lifetime.
-//   - TraceTrait removed in 1.x — methods are directly on UserTrace.
-//   - Callback: |record: &EventRecord, schema_locator: &SchemaLocator| (both &ref)
-//   - severity_to_threat imported from agents::base — not redefined here.
-//
-// Admin note:
-//   Kernel-Process and Security-Auditing require admin. DNS-Client does not.
-//   Failures are logged as warnings — Phase 1 agents continue unaffected.
+// All other logic unchanged from Phase 3.
 
-use std::sync::Arc;
-use tokio::sync::{Mutex, mpsc};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use ferrisetw::EventRecord;
@@ -35,41 +31,58 @@ use super::providers::{
     SUSPICIOUS_IMAGE_PATHS, SUSPICIOUS_CMDLINE_FRAGMENTS, SUSPICIOUS_DNS_PATTERNS,
 };
 
+// Shared last-event timestamp map type
+pub type EventTimesMap = Arc<Mutex<HashMap<String, Instant>>>;
+
 // ── Trace handle store ────────────────────────────────────────────────────────
-// Holds all active ETW trace handles. Stored in main.rs for process lifetime.
-// Dropping this struct stops all ETW sessions cleanly.
 
 pub struct EtwHandles {
     _kernel_process:    Option<UserTrace>,
     _dns_client:        Option<UserTrace>,
     _security_auditing: Option<UserTrace>,
+    /// Shared map of provider → last event time.
+    /// main.rs reads this for heartbeat monitoring.
+    pub last_event_times: EventTimesMap,
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 pub fn start_etw_consumers(
-    _state:    Arc<Mutex<AegisState>>,
+    _state:    Arc<tokio::sync::Mutex<AegisState>>,
     report_tx: mpsc::UnboundedSender<AgentReport>,
 ) -> EtwHandles {
+    // Shared timestamp map — seeded with current time so providers that
+    // fail to start don't immediately trigger a false heartbeat alert.
+    let times: EventTimesMap = Arc::new(Mutex::new({
+        let mut m = HashMap::new();
+        m.insert("kernel_process".to_string(),    Instant::now());
+        m.insert("dns_client".to_string(),        Instant::now());
+        m.insert("security_auditing".to_string(), Instant::now());
+        m
+    }));
+
     let kernel_handle = {
-        let tx = report_tx.clone();
-        match build_kernel_process_trace(tx) {
+        let tx   = report_tx.clone();
+        let ts   = Arc::clone(&times);
+        match build_kernel_process_trace(tx, ts) {
             Ok(t)  => { info!("ETW: Microsoft-Windows-Kernel-Process active"); Some(t) }
             Err(e) => { warn!("ETW: Kernel-Process failed (need admin?): {}", e); None }
         }
     };
 
     let dns_handle = {
-        let tx = report_tx.clone();
-        match build_dns_trace(tx) {
+        let tx   = report_tx.clone();
+        let ts   = Arc::clone(&times);
+        match build_dns_trace(tx, ts) {
             Ok(t)  => { info!("ETW: Microsoft-Windows-DNS-Client active"); Some(t) }
             Err(e) => { warn!("ETW: DNS-Client failed: {}", e); None }
         }
     };
 
     let security_handle = {
-        let tx = report_tx.clone();
-        match build_security_auditing_trace(tx) {
+        let tx   = report_tx.clone();
+        let ts   = Arc::clone(&times);
+        match build_security_auditing_trace(tx, ts) {
             Ok(t)  => { info!("ETW: Microsoft-Windows-Security-Auditing active"); Some(t) }
             Err(e) => { warn!("ETW: Security-Auditing failed: {}", e); None }
         }
@@ -79,6 +92,7 @@ pub fn start_etw_consumers(
         _kernel_process:    kernel_handle,
         _dns_client:        dns_handle,
         _security_auditing: security_handle,
+        last_event_times:   times,
     }
 }
 
@@ -86,10 +100,16 @@ pub fn start_etw_consumers(
 
 fn build_kernel_process_trace(
     tx: mpsc::UnboundedSender<AgentReport>,
+    times: EventTimesMap,
 ) -> anyhow::Result<UserTrace> {
 
     let provider = Provider::by_guid(KERNEL_PROCESS_GUID)
         .add_callback(move |record: &EventRecord, schema_locator: &SchemaLocator| {
+            // Update heartbeat timestamp on every event received
+            if let Ok(mut t) = times.lock() {
+                t.insert("kernel_process".to_string(), Instant::now());
+            }
+
             let event_id = record.event_id();
 
             if event_id != kernel_process::EVENT_PROCESS_START
@@ -181,11 +201,16 @@ fn build_kernel_process_trace(
 // ── DNS-Client ────────────────────────────────────────────────────────────────
 
 fn build_dns_trace(
-    tx: mpsc::UnboundedSender<AgentReport>,
+    tx:    mpsc::UnboundedSender<AgentReport>,
+    times: EventTimesMap,
 ) -> anyhow::Result<UserTrace> {
 
     let provider = Provider::by_guid(DNS_CLIENT_GUID)
         .add_callback(move |record: &EventRecord, schema_locator: &SchemaLocator| {
+            if let Ok(mut t) = times.lock() {
+                t.insert("dns_client".to_string(), Instant::now());
+            }
+
             if record.event_id() != dns_client::EVENT_DNS_QUERY { return }
 
             let Ok(schema) = schema_locator.event_schema(record) else { return };
@@ -226,19 +251,24 @@ fn build_dns_trace(
 // ── Security-Auditing ─────────────────────────────────────────────────────────
 
 fn build_security_auditing_trace(
-    tx: mpsc::UnboundedSender<AgentReport>,
+    tx:    mpsc::UnboundedSender<AgentReport>,
+    times: EventTimesMap,
 ) -> anyhow::Result<UserTrace> {
 
     let provider = Provider::by_guid(SECURITY_AUDITING_GUID)
         .add_callback(move |record: &EventRecord, _: &SchemaLocator| {
+            if let Ok(mut t) = times.lock() {
+                t.insert("security_auditing".to_string(), Instant::now());
+            }
+
             let event_id = record.event_id();
             let (ftype, sev, detail) = match event_id {
                 e if e == security_auditing::EVENT_LOGON_FAILURE =>
-                    ("etw_logon_failure",   0.5_f32,  "ETW: Authentication failure".to_string()),
+                    ("etw_logon_failure",  0.5_f32,  "ETW: Authentication failure".to_string()),
                 e if e == security_auditing::EVENT_SPECIAL_LOGON =>
-                    ("etw_special_logon",   0.6_f32,  "ETW: Special privileges assigned to logon".to_string()),
+                    ("etw_special_logon",  0.6_f32,  "ETW: Special privileges assigned to logon".to_string()),
                 e if e == security_auditing::EVENT_ACCOUNT_LOCKED =>
-                    ("etw_account_locked",  0.75_f32, "ETW: Account lockout — possible brute force".to_string()),
+                    ("etw_account_locked", 0.75_f32, "ETW: Account lockout — possible brute force".to_string()),
                 _ => return,
             };
             push_findings(&tx, "etw_security_auditing", vec![Finding {
