@@ -53,8 +53,8 @@ fn suspicious_path_fragments() -> Vec<&'static str> {
 fn is_known_safe(name: &str, exe: &str) -> bool {
     let exe_lower = exe.to_lowercase();
     match name {
-    // Catch all Steam games — any exe from the Steam apps folder
-    _ if exe_lower.contains("\\steamapps\\") => true,
+        // Catch all Steam games — any exe from the Steam apps folder
+        _ if exe_lower.contains("\\steamapps\\") => true,
         
         // Browsers
         "chrome.exe"        => exe_lower.contains("\\google\\chrome\\application\\"),
