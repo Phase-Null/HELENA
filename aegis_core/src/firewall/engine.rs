@@ -10,6 +10,7 @@
 // All other logic unchanged from Phase 3.
 
 use std::io;
+use std::net::Ipv4Addr;                          // ← ADD THIS
 use anyhow::{Context, Result};
 use tracing::info;
 
@@ -17,6 +18,7 @@ use wfp::{
     FilterEngineBuilder, FilterEngine, Transaction,
     SubLayerBuilder, FilterBuilder, ActionType, Layer,
     PortConditionBuilder,
+    IpAddressConditionBuilder,                    // ← ADD THIS
 };
 
 const HELENA_SUBLAYER_WEIGHT: u16 = 0x8000;
@@ -72,22 +74,27 @@ impl FirewallEngine {
             .description("Allow loopback-only access to AEGIS IPC port")
             .action(ActionType::Permit)
             .layer(Layer::InboundTransportV4)
+            // ── FIX: Add remote address condition restricting to 127.0.0.1 ONLY ──
+            // Without this, the filter permits ALL remote addresses to connect
+            // to the local port, completely defeating the self-protection mechanism.
+            .condition(
+                IpAddressConditionBuilder::remote()
+                    .subnet_v4(Ipv4Addr::new(127, 0, 0, 1), 32)
+                    .build()
+            )
+            // ── Existing: local port condition ──
             .condition(
                 PortConditionBuilder::local()
                     .equal(port)
                     .build()
             )
-            // Note: we permit the loopback address range broadly here.
-            // The block rule added by block_inbound_port covers all other
-            // addresses at lower weight — WFP resolves the conflict by
-            // applying the higher-weight permit for loopback connections.
             .add(&txn)
             .context(format!("Failed to add loopback permit for port {}", port))?;
 
         txn.commit()
             .context("Failed to commit loopback permit transaction")?;
 
-        info!("WFP: Loopback permit added for port {}", port);
+        info!("WFP: Loopback permit added for port {} (127.0.0.1 only)", port);
         Ok(())
     }
 }
