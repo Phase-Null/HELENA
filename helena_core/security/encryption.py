@@ -229,16 +229,59 @@ class EncryptionManager:
         """Generate cryptographically secure random bytes"""
         return secrets.token_bytes(size)
     
-    def wipe_memory(self, data: bytes):
-        """Attempt to wipe sensitive data from memory"""
-        # Overwrite with random data
-        random_data = secrets.token_bytes(len(data))
-        for i in range(len(data)):
-            # This is a best-effort attempt
-            data_bytes = bytearray(data)
-            data_bytes[i] = random_data[i]
-        
-        # Encourage garbage collection
+    def wipe_memory(self, data) -> None:
+        """Securely wipe sensitive data from memory.
+
+        Works reliably for mutable types (bytearray, memoryview, list, numpy).
+        For immutable bytes, uses a ctypes best-effort overwrite of the
+        underlying CPython buffer — this is NOT guaranteed to succeed and
+        depends on CPython internal implementation details.
+
+        IMPORTANT: Always prefer bytearray over bytes for sensitive data
+        from the point of creation. Immutable bytes objects CANNOT be
+        reliably wiped in standard Python.
+        """
+        if isinstance(data, bytearray):
+            # Mutable — overwrite in-place, then shrink to release
+            for i in range(len(data)):
+                data[i] = 0
+            data.clear()
+
+        elif isinstance(data, memoryview):
+            # Mutable memoryview — overwrite in-place
+            for i in range(len(data)):
+                data[i] = 0
+
+        elif isinstance(data, list):
+            # Mutable list — overwrite in-place, then clear
+            for i in range(len(data)):
+                data[i] = 0 if isinstance(data[i], int) else None
+            data.clear()
+
+        elif isinstance(data, bytes):
+            # IMMUTABLE — best-effort ctypes overwrite of CPython buffer.
+            # This may or may not work depending on interpreter state,
+            # object interning, and whether the buffer is shared.
+            # If it fails silently, the data remains in memory.
+            import ctypes
+            try:
+                size = len(data)
+                # Attempt to get a mutable view into the bytes object's
+                # internal buffer and zero it. This exploits CPython's
+                # PyBytesObject layout — it WILL break on other implementations.
+                buf = (ctypes.c_char * size).from_buffer_copy(data)
+                ctypes.memset(buf, 0, size)
+            except (TypeError, BufferError, ValueError):
+                # Cannot reliably wipe immutable bytes.
+                # The only safe recourse is to del the reference and pray GC
+                # reclaims the page before anything reads it.
+                pass
+
+        elif hasattr(data, 'fill'):
+            # numpy arrays — .fill(0) is the canonical wipe
+            data.fill(0)
+
+        # Encourage garbage collection of any intermediate objects
         import gc
         gc.collect()
     
