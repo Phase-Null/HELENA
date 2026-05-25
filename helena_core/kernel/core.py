@@ -675,7 +675,7 @@ class HELENAKernel:
                     task_id=task.task_id,
                     status=TaskStatus.FAILED,
                     output=None,
-                    error=f"Validation failed: {validation_result.errors}",
+                    error=f"Validation failed: {validation_result.issues}",
                     validation_result=validation_result
                 )
             
