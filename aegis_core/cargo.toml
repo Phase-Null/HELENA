@@ -36,8 +36,7 @@ rand             = "0.8"
 ferrisetw = "1"
 # Phase 3 — WFP firewall (MIT OR Apache-2.0 license — clean for commercial use)
 # Note: do NOT use windows-wfp (lostyzen) — that one is GPL-2.0
-- wfp = "0.0.3"
-+ wfp = "0.0.7"
+wfp = "0.0.7"
 
 [build-dependencies]
 winres = "0.1"
