@@ -575,7 +575,7 @@ class ChatEngine:
                         f"Style: {p.response_style}."
                     )
                 memory_line = ""
-                if memory_results and intent not in (Intent.GREETING, Intent.QUESTION):
+                if memory_results and intent not in (Intent.GREETING, Intent.EXPLAIN):
                     snippets = [m.get("content", "")[:150] for m in memory_results[:3]]
                     memory_line = "Relevant context from memory:\n" + "\n".join(f"- {s}" for s in snippets)
 
