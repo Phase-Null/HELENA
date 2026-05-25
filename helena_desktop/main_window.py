@@ -113,8 +113,14 @@ class MainWindow(QMainWindow):
  
         try:
             from helena_training import AutonomousTrainer
-            self.trainer = AutonomousTrainer(self.kernel, self.memory, self.config_manager)
-        except Exception:
+            self.trainer = AutonomousTrainer(
+                self.kernel,
+                self.runtime,
+                self.memory,
+                self.config_manager
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize trainer: {e}")
             self.trainer = None
  
         self._build_ui()
