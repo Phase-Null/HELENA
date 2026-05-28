@@ -163,6 +163,58 @@ class CodeEditor:
             if not syntax_ok:
                 return {"ok": False, "error": f"Syntax error — write aborted: {syntax_err}"}
 
+    def write_file(self, relative_path: str, content: str,
+                   reason: str = "") -> Dict[str, Any]:
+        """
+        Write content to a file.
+
+        Steps:
+        1. Check the path is allowed
+        2. Validate Python syntax
+        3. Security audit the code (NEW)
+        4. Back up the original to .bak
+        5. Write the new content
+        6. Log the operation
+        """
+        path = self._resolve(relative_path, for_write=True)
+        if path is None:
+            return {"ok": False, "error": f"Write not allowed: {relative_path}"}
+
+        # Syntax check
+        if relative_path.endswith(".py"):
+            syntax_ok, syntax_err = self._check_syntax(content)
+            if not syntax_ok:
+                return {"ok": False, "error": f"Syntax error — write aborted: {syntax_err}"}
+
+            # ── NEW: Security audit ──────────────────────────────
+            audit_result = self._audit_code(content)
+            if audit_result["status"] == "unsafe":
+                issues_text = "; ".join(
+                    f"L{i['line']}: {i['message']}" for i in audit_result["issues"]
+                    if i["severity"] in ("CRITICAL", "HIGH")
+                )
+                logger.warning("CodeEditor",
+                    f"Security audit BLOCKED write to {relative_path}: {issues_text}")
+                return {
+                    "ok": False,
+                    "error": f"Security audit failed — write blocked: {issues_text}",
+                    "audit": audit_result,
+                }
+            elif audit_result["status"] == "warning":
+                # Log warnings but allow the write
+                for w in audit_result["warnings"]:
+                    logger.warning("CodeEditor", f"Security warning for {relative_path}: {w}")
+            # ── END NEW ─────────────────────────────────────────
+
+        # Backup
+        backup_path = None
+        if path.exists():
+            backup_path = path.with_suffix(path.suffix + ".bak")
+            shutil.copy2(path, backup_path)
+            logger.info("CodeEditor", f"Backup created: {backup_path.name}")
+
+        # ... (rest of write_file unchanged) ...
+
         # Backup
         backup_path = None
         if path.exists():
