@@ -76,7 +76,7 @@ class EncryptionManager:
         """Encrypt data using AES-256-GCM"""
         
         # Derive encryption key
-        encryption_key = self.derive_key(f"encryption:{purpose}")
+        encryption_key = bytearray(self.derive_key(f"encryption:{purpose}"))
         
         # Generate nonce
         nonce = secrets.token_bytes(self.NONCE_SIZE)
@@ -90,12 +90,16 @@ class EncryptionManager:
             encryptor.authenticate_additional_data(associated_data)
         
         # Encrypt
-        ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+        ciphertext = bytearray(encryptor.update(plaintext) + encryptor.finalize())
         
         # Get authentication tag
         tag = encryptor.tag
         
         # Combine nonce + ciphertext + tag
+        result = nonce + bytes(ciphertext) + tag
+        self.wipe_memory(ciphertext)
+        self.wipe_memory(encryption_key)
+        return result
         return nonce + ciphertext + tag
     
     def decrypt_aes_gcm(self, 
