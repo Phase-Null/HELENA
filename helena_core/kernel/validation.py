@@ -100,24 +100,27 @@ class Validator:
         return []
 
 class SecurityValidator(Validator):
-    """Security-focused validator"""
-    
+    """Security-focused validator with AST-based code analysis."""
+
     def __init__(self):
         super().__init__("SecurityValidator", ValidationLevel.CRITICAL)
-        
-        # Security patterns to check
+
+        # String patterns for quick pre-check (still useful for non-code parameters)
         self.dangerous_patterns = [
             ("os.system", "SYSTEM_CALL"),
             ("subprocess.run", "SUBPROCESS"),
+            ("subprocess.call", "SUBPROCESS"),
+            ("subprocess.Popen", "SUBPROCESS"),
             ("__import__", "DYNAMIC_IMPORT"),
             ("eval(", "EVAL"),
             ("exec(", "EXEC"),
             ("compile(", "COMPILE"),
+            ("shell=True", "SHELL_INJECTION"),
         ]
-    
+
     def _validate_impl(self, task) -> List[ValidationIssue]:
         issues = []
-        
+
         # Check for dangerous commands
         dangerous_commands = ["format_disk", "delete_all", "shutdown_system"]
         if task.command in dangerous_commands:
@@ -127,8 +130,8 @@ class SecurityValidator(Validator):
                 code="DANGEROUS_COMMAND",
                 suggestion="Require explicit operator confirmation"
             ))
-        
-        # Check parameters for dangerous patterns
+
+        # Check parameters for dangerous patterns (string-based quick check)
         params_str = json.dumps(task.parameters)
         for pattern, code in self.dangerous_patterns:
             if pattern in params_str:
@@ -139,7 +142,35 @@ class SecurityValidator(Validator):
                     details={"pattern": pattern, "context": "parameters"},
                     suggestion="Sanitize input or require additional validation"
                 ))
-        
+
+        # AST-based deep check for code_execute tasks
+        if task.command == "code_execute" and "code" in task.parameters:
+            code = task.parameters["code"]
+            if isinstance(code, str):
+                try:
+                    from helena_training.auditor import SecurityAuditor
+                    auditor = SecurityAuditor()
+                    result = auditor.audit(code)
+                    if result["status"] == "unsafe":
+                        for issue in result["issues"]:
+                            if issue["severity"] in ("CRITICAL", "HIGH"):
+                                issues.append(ValidationIssue(
+                                    level=ValidationLevel.CRITICAL,
+                                    message=f"Code security: {issue['message']}",
+                                    code=f"CODE_{issue['code']}",
+                                    details={"line": issue.get("line")},
+                                    suggestion=issue.get("suggestion", ""),
+                                ))
+                except ImportError:
+                    # SecurityAuditor not available — fall back to string check only
+                    pass
+                except Exception as e:
+                    issues.append(ValidationIssue(
+                        level=ValidationLevel.HIGH,
+                        message=f"Code audit failed: {e}",
+                        code="AUDIT_ERROR",
+                    ))
+
         return issues
 
 class SyntaxValidator(Validator):
