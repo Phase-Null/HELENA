@@ -149,28 +149,6 @@ class CodeEditor:
         Steps:
         1. Check the path is allowed
         2. Validate Python syntax
-        3. Back up the original to .bak
-        4. Write the new content
-        5. Log the operation
-        """
-        path = self._resolve(relative_path, for_write=True)
-        if path is None:
-            return {"ok": False, "error": f"Write not allowed: {relative_path}"}
-
-        # Syntax check
-        if relative_path.endswith(".py"):
-            syntax_ok, syntax_err = self._check_syntax(content)
-            if not syntax_ok:
-                return {"ok": False, "error": f"Syntax error — write aborted: {syntax_err}"}
-
-    def write_file(self, relative_path: str, content: str,
-                   reason: str = "") -> Dict[str, Any]:
-        """
-        Write content to a file.
-
-        Steps:
-        1. Check the path is allowed
-        2. Validate Python syntax
         3. Security audit the code (NEW)
         4. Back up the original to .bak
         5. Write the new content
@@ -205,15 +183,6 @@ class CodeEditor:
                 for w in audit_result["warnings"]:
                     logger.warning("CodeEditor", f"Security warning for {relative_path}: {w}")
             # ── END NEW ─────────────────────────────────────────
-
-        # Backup
-        backup_path = None
-        if path.exists():
-            backup_path = path.with_suffix(path.suffix + ".bak")
-            shutil.copy2(path, backup_path)
-            logger.info("CodeEditor", f"Backup created: {backup_path.name}")
-
-        # ... (rest of write_file unchanged) ...
 
         # Backup
         backup_path = None
@@ -296,3 +265,23 @@ class CodeEditor:
             return True, ""
         except SyntaxError as e:
             return False, f"line {e.lineno}: {e.msg}"
+
+    def _audit_code(self, source: str) -> Dict[str, Any]:
+        """Run security audit on code using SecurityAuditor."""
+        try:
+            from helena_training.auditor import SecurityAuditor
+            auditor = SecurityAuditor()
+            return auditor.audit(source)
+        except ImportError:
+            # SecurityAuditor not available — log and pass (don't block writes)
+            logger.warning("CodeEditor", "SecurityAuditor not available — skipping audit")
+            return {"status": "safe", "issues": [], "warnings": []}
+        except Exception as e:
+            # Audit itself failed — be conservative and block
+            logger.error("CodeEditor", f"Security audit failed: {e}")
+            return {
+                "status": "unsafe",
+                "issues": [{"severity": "HIGH", "message": f"Audit failed: {e}",
+                            "code": "AUDIT_ERROR", "line": None, "suggestion": ""}],
+                "warnings": [],
+            }
