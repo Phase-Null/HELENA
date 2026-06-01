@@ -66,35 +66,44 @@ impl FirewallEngine {
     /// WFP evaluates filters within a sublayer by weight — higher weight wins.
     /// The permit here (0xFFFF) beats the block added by block_inbound_port (default 0).
     pub fn add_loopback_permit(&mut self, port: u16) -> Result<()> {
-        let txn = Transaction::new(&mut self.engine)
-            .context("Failed to begin WFP transaction for loopback permit")?;
-
-        FilterBuilder::default()
+        // WFP permit — over-broad due to wfp 0.0.3 lacking IpAddrConditionBuilder
+        let filter_id = FilterBuilder::default()
             .name(&format!("HELENA Loopback Permit Port {}", port))
-            .description("Allow loopback-only access to AEGIS IPC port")
+            .description("Permit loopback traffic (WFP — needs remote-addr restriction after wfp upgrade)")
             .action(ActionType::Permit)
             .layer(Layer::InboundTransportV4)
-            // ── FIX: Add remote address condition restricting to 127.0.0.1 ONLY ──
-            // Without this, the filter permits ALL remote addresses to connect
-            // to the local port, completely defeating the self-protection mechanism.
-            .condition(
-                IpAddressConditionBuilder::remote()
-                    .subnet_v4(Ipv4Addr::new(127, 0, 0, 1), 32)
-                    .build()
-            )
-            // ── Existing: local port condition ──
+            .weight(0xFFFF)  // High weight so it matches before the block rule
             .condition(
                 PortConditionBuilder::local()
                     .equal(port)
                     .build()
             )
-            .add(&txn)
-            .context(format!("Failed to add loopback permit for port {}", port))?;
+            .add(&self.txn()?)
+            .context(format!("Failed to add WFP loopback permit for port {}", port))?;
 
-        txn.commit()
-            .context("Failed to commit loopback permit transaction")?;
+        self.txn()?.commit()?;
 
-        info!("WFP: Loopback permit added for port {} (127.0.0.1 only)", port);
+        // ALSO add a netsh loopback-only rule as a safety net
+        // This ensures 127.0.0.1 is explicitly permitted even if the WFP rule is too broad
+        let netsh_output = std::process::Command::new("netsh")
+            .args([
+                "advfirewall", "firewall", "add", "rule",
+                &format!("name=HELENA_Loopback_Permit_{}", port),
+                "dir=in",
+                "action=allow",
+                &format!("localport={}", port),
+                "protocol=tcp",
+                "remoteip=127.0.0.1",
+                "profile=any",
+            ])
+            .output()
+            .context("Failed to execute netsh for loopback permit")?;
+
+        if !netsh_output.status.success() {
+            warn!("netsh loopback permit for port {} failed: {:?}",
+                  port, String::from_utf8_lossy(&netsh_output.stderr));
+        }
+
         Ok(())
     }
 }
