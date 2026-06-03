@@ -72,7 +72,7 @@ impl FirewallEngine {
             .description("Permit loopback traffic (WFP — needs remote-addr restriction after wfp upgrade)")
             .action(ActionType::Permit)
             .layer(Layer::InboundTransportV4)
-            .weight(0xFFFF)  // High weight so it matches before the block rule
+            .weight(0x7FFF)  // High weight so it matches before the block rule, lower weight than netsh rule
             .condition(
                 PortConditionBuilder::local()
                     .equal(port)
