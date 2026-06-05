@@ -17,9 +17,11 @@
 // All reads and writes use Tokio's async I/O.
 // Messages are newline-delimited JSON.
 
+use crate::firewall::ipc_auth::{IpcAuth, IpcChallenge};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::{TcpListener, TcpStream},
     sync::{mpsc, Mutex},
 };
@@ -54,16 +56,21 @@ impl IpcServer {
 
     /// Run the TCP server. Accepts one connection at a time from HELENA.
     /// This is a long-running async task — spawn it with tokio::spawn.
-    pub async fn run(self) -> anyhow::Result<()> {
+    pub async fn run(self, helena_data_dir: &Path) -> anyhow::Result<()> {
         let addr = format!("{}:{}", AEGIS_ADDR, AEGIS_PORT);
         let listener = TcpListener::bind(&addr).await?;
         info!("AEGIS IPC listening on {}", addr);
+
+        // ── Initialize IPC Authentication ──
+        let ipc_auth = IpcAuth::new(helena_data_dir)
+            .expect("Failed to initialize IPC authentication");
+        // ───────────────────────────────────
 
         loop {
             match listener.accept().await {
                 Ok((stream, peer)) => {
                     info!("HELENA connected from {}", peer);
-                    self.handle_connection(stream).await;
+                    self.handle_connection(stream, &ipc_auth).await;
                     info!("HELENA disconnected. Waiting for reconnect.");
                 }
                 Err(e) => {
@@ -74,7 +81,90 @@ impl IpcServer {
         }
     }
 
-    async fn handle_connection(&self, stream: TcpStream) {
+    async fn handle_connection(&self, mut stream: TcpStream, ipc_auth: &IpcAuth) {
+        // ── IPC Authentication (BUG-4 fix) ──
+        // Before accepting any commands, verify the client knows the shared secret.
+        let challenge = ipc_auth.create_challenge();
+
+        // 1. Send challenge to client
+        // Note: Using base64 0.21+ API via engine::general_purpose
+        let nonce_b64 = base64::engine::general_purpose::STANDARD.encode(challenge.nonce());
+        let challenge_msg = serde_json::json!({
+            "type": "auth_challenge",
+            "nonce": nonce_b64,
+        });
+        
+        let challenge_bytes = match serde_json::to_vec(&challenge_msg) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Failed to serialize auth challenge: {}", e);
+                return;
+            }
+        };
+
+        if stream.write_all(&(challenge_bytes.len() as u32).to_le_bytes()).await.is_err() {
+            return;
+        }
+        if stream.write_all(&challenge_bytes).await.is_err() {
+            return;
+        }
+        if stream.flush().await.is_err() {
+            return;
+        }
+
+        // 2. Read client response
+        let mut resp_len_buf = [0u8; 4];
+        if stream.read_exact(&mut resp_len_buf).await.is_err() {
+            return;
+        }
+        let resp_len = u32::from_le_bytes(resp_len_buf) as usize;
+        
+        // Basic sanity check on length to prevent allocation attacks
+        if resp_len > 1024 * 1024 {
+             warn!("IPC: Auth response too large ({} bytes), dropping.", resp_len);
+             return;
+        }
+
+        let mut resp_buf = vec![0u8; resp_len];
+        if stream.read_exact(&mut resp_buf).await.is_err() {
+            return;
+        }
+
+        let resp_msg: serde_json::Value = match serde_json::from_slice(&resp_buf) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("IPC: Failed to parse auth response JSON: {}", e);
+                return;
+            }
+        };
+
+        let client_hmac_b64 = match resp_msg.get("hmac").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                warn!("IPC: Missing HMAC in auth response");
+                return;
+            }
+        };
+
+        let client_hmac = match base64::engine::general_purpose::STANDARD.decode(client_hmac_b64) {
+            Ok(h) => h,
+            Err(e) => {
+                warn!("IPC: Failed to decode base64 HMAC: {}", e);
+                return;
+            }
+        };
+
+        // 3. Verify
+        if client_hmac.len() != 32 || !ipc_auth.verify(&challenge, 
+            &client_hmac.try_into().unwrap_or([0u8; 32])) {
+            warn!("IPC: Authentication FAILED from {:?}", stream.peer_addr());
+            // We do not return a specific error message to the client to avoid leaking info
+            return;
+        }
+
+        info!("IPC: Client authenticated successfully");
+        // ── End IPC Authentication ──
+
         // Split into read and write halves
         let (reader, writer) = stream.into_split();
         let mut lines = BufReader::new(reader).lines();
