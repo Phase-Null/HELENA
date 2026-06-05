@@ -17,6 +17,7 @@
 pub mod engine;
 pub mod rules;
 pub mod responder;
+pub mod ipc_auth;
 
 pub use engine::FirewallEngine;
 pub use responder::Responder;
