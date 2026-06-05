@@ -166,6 +166,8 @@ pub enum MessageKind {
     ThreatLevelChange,
     ResponseExecuted,
     Error,
+    AuthChallenge,   // Server → Client: contains nonce
+    AuthResponse,    // Client → Server: contains HMAC
 }
 
 // ── Typed payloads ────────────────────────────────────────────────────────────
