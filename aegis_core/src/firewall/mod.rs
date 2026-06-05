@@ -1,16 +1,18 @@
 // src/firewall/mod.rs
 //
-// Phase 3 — WFP firewall layer.
+// AEGIS Firewall Layer — Phase 3 (v2, bug-fixed)
 //
-// Three sub-modules:
-//   engine.rs   — WFP session lifecycle. Opens the engine, registers HELENA's
-//                 provider and sublayer, closes cleanly on drop.
-//   rules.rs    — The actual firewall operations: block_ip, unblock_ip,
-//                 block_port, list_active_rules.
-//   responder.rs — Decision logic: given a set of findings, decide what tier
-//                 of response is warranted, build a ResponsePackage, and
-//                 either execute immediately (Tier 2-3) or queue for
-//                 operator approval (Tier 4-5).
+// Sub-modules:
+//   engine.rs    — WFP session lifecycle, filter management
+//   rules.rs     — IP blocking (netsh) + port blocking (WFP), rule metadata
+//   responder.rs — Tier-based response decision logic (all 6 tiers implemented)
+//
+// Bug fixes in v2:
+//   Bug 4:  Loopback permit restricted to 127.0.0.1 (IpAddressConditionBuilder)
+//   Bug 23: Retaliate/Lockdown tiers now fully implemented
+//   Bug 24: WFP filter IDs stored for proper removal
+//   Bug 27: Only temporary IP blocks removed on shutdown
+//   BUG-3:  Single-transaction loopback permit (no double commit)
 
 pub mod engine;
 pub mod rules;
@@ -18,3 +20,4 @@ pub mod responder;
 
 pub use engine::FirewallEngine;
 pub use responder::Responder;
+pub use rules::{RuleSet, IPRuleMeta, summary, cleanup_temporary_rules, cleanup_all_rules};
