@@ -1,8 +1,8 @@
 [package]
-name    = "aegis-core"
-version = "0.4.0"
-edition = "2021"
-authors = ["Phase-Null"]
+name        = "aegis-core"
+version     = "0.4.0"
+edition     = "2021"
+authors     = ["Phase-Null"]
 description = "AEGIS Security Core — HELENA defensive systems"
 
 [[bin]]
@@ -10,11 +10,11 @@ name = "aegis"
 path = "src/main.rs"
 
 [dependencies]
-tokio      = { version = "1", features = ["full"] }
-serde      = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow     = "1"
-tracing            = "0.1"
+tokio       = { version = "1", features = ["full"] }
+serde       = { version = "1", features = ["derive"] }
+serde_json  = "1"
+anyhow      = "1"
+tracing     = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 sha2        = "0.10"
 hex         = "0.4"
@@ -23,6 +23,9 @@ chrono      = { version = "0.4", features = ["serde"] }
 uuid        = { version = "1", features = ["v4"] }
 sysinfo     = "0.33"
 netstat2    = "0.9"
+hmac        = "0.12"
+sha2        = "0.10"
+rand        = "0.8"
 
 # Phase 6 crypto stubs
 aes-gcm          = "0.10"
