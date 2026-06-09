@@ -433,7 +433,6 @@ class PersonalityEngine:
             val = emotions[dominant]
             if isinstance(val, (int, float)):
                 intensity = float(val)
-
         if dominant == "FRUSTRATION":
             profile.humor_frequency *= max(0.1, 1.0 - intensity)
             profile.patience = max(0.1, profile.patience - intensity * 0.3)
