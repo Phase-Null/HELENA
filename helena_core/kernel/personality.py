@@ -427,7 +427,12 @@ class PersonalityEngine:
     ) -> PersonalityProfile:
         """Adjust the profile based on current emotion."""
         dominant = emotion.get("dominant", "CALM")
-        intensity = emotion.get("intensity", 0.0)
+        emotions = emotion.get("emotions", {})
+        intensity = 0.0
+        if isinstance(emotions, dict) and dominant in emotions:
+            val = emotions[dominant]
+            if isinstance(val, (int, float)):
+                intensity = float(val)
 
         if dominant == "FRUSTRATION":
             profile.humor_frequency *= max(0.1, 1.0 - intensity)
