@@ -17,6 +17,23 @@ import base64
 
 from cryptography.fernet import Fernet
 
+def _derive_fernet_key(raw_key: bytes) -> bytes:
+    """Derive a Fernet key from raw key material using PBKDF2.
+    
+    MUST match config_manager._derive_fernet_key() so that the
+    same raw key produces the same Fernet key in both modules.
+    """
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    import base64
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=b'helena_fernet_salt',
+        iterations=100000,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(raw_key))
+
 class LogLevel(Enum):
     DEBUG = 10
     INFO = 20
@@ -96,14 +113,14 @@ class EncryptedRotatingFileHandler(logging.handlers.RotatingFileHandler):
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
         
         super().__init__(filename, maxBytes=max_bytes, backupCount=backup_count, encoding=encoding)
-        
+
         self.encryption_key = encryption_key
         if encryption_key:
             try:
-                fernet_key = base64.urlsafe_b64encode(encryption_key)
-                self.fernet = Fernet(fernet_key)
+                self.fernet = Fernet(self._derive_fernet_key(encryption_key))
             except Exception:
-                self.fernet = Fernet(encryption_key)
+                logger.warning("Failed to initialize log encryption")
+                self.fernet = None
         else:
             self.fernet = None
         
@@ -214,11 +231,10 @@ class HelenaLogger:
         self.encryption_key = encryption_key
         if encryption_key:
             try:
-                # Helena config uses raw 32-byte key material.
-                self.fernet = Fernet(base64.urlsafe_b64encode(encryption_key))
+                self.fernet = Fernet(self._derive_fernet_key(encryption_key))
             except Exception:
-                # If caller already provided a Fernet key, try it directly.
-                self.fernet = Fernet(encryption_key)
+                logger.warning("Failed to initialize log encryption")
+                self.fernet = None
         else:
             self.fernet = None
         self.max_log_size = max_log_size_mb * 1024 * 1024
