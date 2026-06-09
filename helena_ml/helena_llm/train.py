@@ -354,7 +354,6 @@ class HelenaNetTrainer:
                 if step >= self.config.warmup_steps:
                     scheduler.step()
  
-                total_loss += loss.item()
                 step += 1
  
                 # Logging
