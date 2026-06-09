@@ -26,7 +26,7 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
  
-from .config import HelenaNetConfig, HELENA_NANO, HELENA_BASE
+from .config import HelenaNetConfig, HELENA_NANO, HELENA_BASE, HELENA_LARGE
 from .architecture import HelenaNet
 from .tokenizer import HelenaTokenizer
  
@@ -408,7 +408,7 @@ def main():
     parser.add_argument("--resume", default=None)
     args = parser.parse_args()
  
-    config_map = {"nano": HELENA_NANO, "base": HELENA_BASE}
+    config_map = {"nano": HELENA_NANO, "base": HELENA_BASE, "large": HELENA_LARGE}
     config = config_map.get(args.config, HELENA_NANO)
  
     trainer = HelenaNetTrainer(config=config, device=args.device)
