@@ -100,7 +100,6 @@ class EncryptionManager:
         self.wipe_memory(ciphertext)
         self.wipe_memory(encryption_key)
         return result
-        return nonce + ciphertext + tag
     
     def decrypt_aes_gcm(self, 
                        encrypted_data: bytes,
