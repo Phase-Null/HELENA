@@ -105,6 +105,9 @@ class ResourceManager:
         self.on_limit_violation: Optional[Callable] = None
         self.on_thermal_warning: Optional[Callable] = None
         self.on_resource_update: Optional[Callable] = None
+        self.last_disk_io = None
+        self.last_net_io = None
+        self.last_io_time = None
         
         logger.info("ResourceManager", "Resource manager initialized")
     
@@ -204,18 +207,14 @@ class ResourceManager:
             # Memory usage
             memory = psutil.virtual_memory()
             
-            # Disk I/O
-            disk_io = psutil.disk_io_counters()
-            disk_io_mbps = 0.0
-            if disk_io:
-                # Calculate MB/s from bytes
-                disk_io_mbps = (disk_io.read_bytes + disk_io.write_bytes) / (1024 * 1024)
-            
-            # Network I/O
-            net_io = psutil.net_io_counters()
-            network_io_mbps = 0.0
-            if net_io:
-                network_io_mbps = (net_io.bytes_sent + net_io.bytes_recv) / (1024 * 1024)
+            now = time.time()
+            if disk_io and self._last_disk_io and self._last_io_time:
+                dt = now - self._last_io_time
+                if dt > 0:
+                    delta_bytes = (disk_io.read_bytes - self._last_disk_io.read_bytes)
+                    disk_io_mbps = (delta_bytes / dt) / (1024 * 1024)
+            self._last_disk_io = disk_io
+            self._last_io_time = now
             
             # GPU usage (if available)
             gpu_percent = 0.0
