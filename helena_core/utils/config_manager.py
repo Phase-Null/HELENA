@@ -3,6 +3,7 @@
 Centralized configuration management with encryption and validation
 """
 import os
+import stat
 import yaml
 import json
 import hashlib
@@ -64,7 +65,7 @@ class PerformanceConfig:
 @dataclass  
 class MemoryConfig:
     """Memory system configuration"""
-    vector_dimension: int = 768
+    vector_dimension: int = 384       # FIX Bug #19: was 768, must match _OfflineEmbedder (all-MiniLM-L6-v2) output
     max_working_memories: int = 1000
     max_short_term_memories: int = 100000
     cache_size: int = 1000
@@ -132,6 +133,9 @@ class HelenaConfig:
 class ConfigManager:
     """Manages HELENA configuration with encryption and validation"""
     
+    # Name of the persisted key file (stored alongside the config file)
+    _KEY_FILENAME = ".encryption_key"
+    
     def __init__(self, config_path: Optional[Path] = None):
         self.config_path = config_path or Path.home() / ".helena" / "config"
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,23 +146,127 @@ class ConfigManager:
         # Default hardware profiles path
         self.hardware_profiles_path = Path(__file__).parent.parent / "config" / "hardware_profiles.yaml"
         self.security_policies_path = Path(__file__).parent.parent / "config" / "security_policies.yaml"
+    
+    # ── Key persistence properties ──────────────────────────────────
+    
+    @property
+    def _key_file_path(self) -> Path:
+        """Path to the persisted encryption key file, stored alongside the config."""
+        return self.config_path.parent / self._KEY_FILENAME
+    
+    def _load_persisted_key(self) -> Optional[bytes]:
+        """
+        Load the encryption key from disk.
+        Returns the raw 32-byte key, or None if no key file exists.
+        """
+        key_file = self._key_file_path
+        if not key_file.exists():
+            return None
         
+        try:
+            stored = key_file.read_bytes()
+            if len(stored) == 32:
+                logger.info("Loaded persisted encryption key from %s", key_file)
+                return stored
+            else:
+                logger.warning(
+                    "Persisted key file has wrong length (%d bytes, expected 32). "
+                    "Ignoring and regenerating.",
+                    len(stored),
+                )
+                return None
+        except Exception as e:
+            logger.error("Failed to read persisted encryption key: %s", e)
+            return None
+    
+    def _persist_key(self, key: bytes) -> bool:
+        """
+        Persist the encryption key to disk with owner-only permissions.
+        Returns True on success.
+        """
+        key_file = self._key_file_path
+        try:
+            # Write the key
+            key_file.write_bytes(key)
+            
+            # Restrict file permissions to owner-only (read + write)
+            # On Windows, this sets the file as not world-readable;
+            # on Linux/macOS, this is chmod 600.
+            try:
+                if os.name == 'nt':
+                    # Windows: remove inherited ACEs and grant only the owner
+                    import subprocess
+                    # icacls <file> /inheritance:r /grant:r "%USERNAME%:F"
+                    subprocess.run(
+                        [
+                            "icacls", str(key_file),
+                            "/inheritance:r",
+                            "/grant:r", f"{os.environ.get('USERNAME', '*')}:F",
+                        ],
+                        check=True,
+                        capture_output=True,
+                        timeout=10,
+                    )
+                else:
+                    # POSIX: chmod 600 (owner read/write only)
+                    key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+            except Exception as perm_err:
+                # Non-fatal — the key is written, just not permission-restricted
+                logger.warning(
+                    "Could not restrict key file permissions: %s. "
+                    "Consider manually setting %s to owner-only access.",
+                    perm_err, key_file,
+                )
+            
+            logger.info("Persisted encryption key to %s", key_file)
+            return True
+            
+        except Exception as e:
+            logger.error("Failed to persist encryption key: %s", e)
+            return False
+    
+    # ── Initialization ───────────────────────────────────────────────
+    
     def initialize(self, operator_id: str, encryption_key: Optional[bytes] = None) -> bool:
         """
-        Initialize configuration system
+        Initialize configuration system.
         Returns: True if successful
+        
+        Key resolution order:
+        1. Explicit key passed via `encryption_key` argument (caller-managed)
+        2. Key loaded from persisted key file on disk (survives restart)
+        3. New key generated, persisted, and used (first-run)
         """
         try:
             # Set operator ID
             self.config.system.operator_id = operator_id
             
-            # Generate or set encryption key
+            # Resolve encryption key
             if encryption_key:
+                # Priority 1: caller provided an explicit key
                 self.config._encryption_key = encryption_key
+                logger.info("Using explicitly provided encryption key")
             elif self.config.security.encryption_enabled:
-                self.config._encryption_key = self._generate_encryption_key(operator_id)
+                # Priority 2: try loading from disk
+                persisted = self._load_persisted_key()
+                if persisted is not None:
+                    self.config._encryption_key = persisted
+                    logger.info("Using persisted encryption key (restart-safe)")
+                else:
+                    # Priority 3: generate, persist, then use
+                    new_key = self._generate_encryption_key(operator_id)
+                    if self._persist_key(new_key):
+                        self.config._encryption_key = new_key
+                        logger.info("Generated and persisted new encryption key")
+                    else:
+                        # Fallback: use the key in-memory only (will be lost on restart)
+                        self.config._encryption_key = new_key
+                        logger.warning(
+                            "Encryption key generated but NOT persisted to disk. "
+                            "Encrypted data will be lost on restart!"
+                        )
             
-            # Initialize encryption
+            # Initialize Fernet cipher from the resolved key
             if self.config._encryption_key:
                 self.fernet = Fernet(self._derive_fernet_key(self.config._encryption_key))
             
@@ -173,7 +281,7 @@ class ConfigManager:
                 return self._create_default_config()
                 
         except Exception as e:
-            logger.error(f"Failed to initialize config: {e}")
+            logger.error("Failed to initialize config: %s", e)
             return False
     
     def _create_default_config(self) -> bool:
@@ -186,7 +294,7 @@ class ConfigManager:
             # Save config
             return self.save()
         except Exception as e:
-            logger.error(f"Failed to create default config: {e}")
+            logger.error("Failed to create default config: %s", e)
             return False
     
     def _detect_hardware_profile(self) -> str:
@@ -229,10 +337,10 @@ class ConfigManager:
                     self.config.memory.max_working_memories = mem.get("max_working_memories", 1000)
                     self.config.memory.max_short_term_memories = mem.get("max_short_term_memories", 100000)
                     
-                logger.info(f"Applied hardware profile: {profile_name}")
+                logger.info("Applied hardware profile: %s", profile_name)
                 
         except Exception as e:
-            logger.warning(f"Failed to apply hardware profile: {e}")
+            logger.warning("Failed to apply hardware profile: %s", e)
     
     def load(self) -> bool:
         """Load configuration from encrypted file"""
@@ -249,7 +357,7 @@ class ConfigManager:
                     decrypted_data = self.fernet.decrypt(encrypted_data)
                     config_dict = yaml.safe_load(decrypted_data.decode('utf-8'))
                 except Exception as e:
-                    logger.error(f"Failed to decrypt config: {e}")
+                    logger.error("Failed to decrypt config (key mismatch?): %s", e)
                     return False
             else:
                 config_dict = yaml.safe_load(encrypted_data.decode('utf-8'))
@@ -265,7 +373,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to load config: {e}")
+            logger.error("Failed to load config: %s", e)
             return False
     
     def save(self) -> bool:
@@ -300,7 +408,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to save config: {e}")
+            logger.error("Failed to save config: %s", e)
             return False
     
     def get_section(self, section) -> Any:
@@ -341,7 +449,7 @@ class ConfigManager:
             return self.save()
             
         except Exception as e:
-            logger.error(f"Failed to update config section: {e}")
+            logger.error("Failed to update config section: %s", e)
             return False
     
     def validate(self) -> Dict[str, List[str]]:
@@ -370,6 +478,12 @@ class ConfigManager:
         sec_errors = []
         if self.config.security.encryption_enabled and not self.config._encryption_key:
             sec_errors.append("Encryption enabled but no key set")
+        # Verify key file exists if encryption is enabled (warn, don't block)
+        if self.config.security.encryption_enabled and not self._key_file_path.exists():
+            sec_errors.append(
+                "Encryption key not persisted — data will be lost on restart. "
+                "Call initialize() to persist the key."
+            )
         if sec_errors:
             errors["security"] = sec_errors
         
@@ -388,11 +502,11 @@ class ConfigManager:
             self.config = HelenaConfig()
             self.config.system.operator_id = operator_id
             
-            # Re-initialize
+            # Re-initialize (will reuse the persisted key if available)
             return self.initialize(operator_id, self.config._encryption_key)
             
         except Exception as e:
-            logger.error(f"Failed to reset config: {e}")
+            logger.error("Failed to reset config: %s", e)
             return False
     
     def export_config(self, export_path: Path, include_secrets: bool = False) -> bool:
@@ -414,28 +528,36 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to export config: {e}")
+            logger.error("Failed to export config: %s", e)
             return False
     
+    # ── Key generation ───────────────────────────────────────────────
+    
     def _generate_encryption_key(self, operator_id: str) -> bytes:
-        """Generate encryption key from operator ID and system entropy"""
+        """
+        Generate a new 32-byte encryption key.
+        
+        The key is derived from a PBKDF2 derivation of the operator ID,
+        then XOR'd with a random component for forward secrecy.
+        
+        IMPORTANT: The caller is responsible for persisting this key via
+        _persist_key(). If the key is not persisted, encrypted data will
+        be lost on restart.
+        """
         import secrets
         
-        # Use operator ID as salt
+        # Deterministic component from operator ID (stable across calls)
         salt = operator_id.encode('utf-8')
-        
-        # Generate random component
-        random_component = secrets.token_bytes(32)
-        
-        # Combine with deterministic component from operator ID
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
             iterations=100000,
         )
-        
         deterministic_component = kdf.derive(operator_id.encode('utf-8'))
+        
+        # Random component (unique per generation — MUST be persisted)
+        random_component = secrets.token_bytes(32)
         
         # XOR combine for final key
         key = bytes(a ^ b for a, b in zip(random_component, deterministic_component))
@@ -443,7 +565,7 @@ class ConfigManager:
         return key
     
     def _derive_fernet_key(self, encryption_key: bytes) -> bytes:
-        """Derive Fernet key from encryption key"""
+        """Derive Fernet-compatible key from raw encryption key"""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -451,6 +573,8 @@ class ConfigManager:
             iterations=100000,
         )
         return base64.urlsafe_b64encode(kdf.derive(encryption_key))
+    
+    # ── Serialization helpers ────────────────────────────────────────
     
     def _to_dict(self) -> Dict[str, Any]:
         """Convert config to dictionary, excluding runtime attributes"""
@@ -508,4 +632,3 @@ def get_config_manager(config_path: Optional[Path] = None) -> ConfigManager:
     if _config_manager is None:
         _config_manager = ConfigManager(config_path)
     return _config_manager
-
