@@ -215,7 +215,7 @@ class EmotionEngine:
             snapshot: Dict[str, float] = {}
             for emo, state in self.states.items():
                 state.decay(now)
-                snapshot[emo.name.lower()] = round(state.intensity, 3)
+                snapshot[emo.name] = round(state.intensity, 3)
 
             dominant = max(snapshot, key=snapshot.get)  # type: ignore[arg-type]
             mood_score = sum(
