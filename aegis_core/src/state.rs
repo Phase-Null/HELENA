@@ -8,7 +8,7 @@
 //     to exhaust memory and hide real threats.
 
 use chrono::{DateTime, Utc};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::ipc::protocol::{Finding, ResponseTier, ThreatLevel, SharedContext};
@@ -53,7 +53,8 @@ pub struct AegisState {
     pub threat_level:       ThreatLevel,
     pub active_agent_count: u32,
     pub pending_responses:  HashMap<String, ResponsePackage>,
-    pub response_history:   Vec<ResponsePackage>,
+    // BUGFIX #33: changed from Vec to VecDeque for O(1) front removal
+    pub response_history:   VecDeque<ResponsePackage>,
     pub threat_context:     HashMap<String, ThreatContextEntry>,
     pub events_processed:   u64,
     pub started_at:         DateTime<Utc>,
@@ -66,7 +67,8 @@ impl AegisState {
             threat_level:       ThreatLevel::Idle,
             active_agent_count: 0,
             pending_responses:  HashMap::new(),
-            response_history:   Vec::new(),
+            // BUGFIX #33: Vec → VecDeque
+            response_history:   VecDeque::new(),
             threat_context:     HashMap::new(),
             events_processed:   0,
             started_at:         Utc::now(),
@@ -236,9 +238,11 @@ impl AegisState {
     }
 
     fn archive_response(&mut self, pkg: ResponsePackage) {
-        self.response_history.push(pkg);
+        self.response_history.push_back(pkg);
         if self.response_history.len() > 200 {
-            self.response_history.remove(0);
+            // BUGFIX #33: was self.response_history.remove(0) which is O(n) on Vec;
+            // now using VecDeque::pop_front() which is O(1)
+            self.response_history.pop_front();
         }
     }
 }
