@@ -141,20 +141,19 @@ class EncryptionManager:
         # Generate nonce
         nonce = secrets.token_bytes(self.CHACHA_NONCE_SIZE)
         
-        # Create cipher
-        cipher = Cipher(algorithms.ChaCha20(encryption_key, nonce), mode=None)
-        encryptor = cipher.encryptor()
+        # BUGFIX #14: Was using raw ChaCha20 (mode=None) without authentication,
+        # allowing bit-flipping attacks. Now uses ChaCha20Poly1305 AEAD.
+        from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+        aead = ChaCha20Poly1305(encryption_key)
+        ciphertext = aead.encrypt(nonce, plaintext, None)
         
-        # Encrypt
-        ciphertext = encryptor.update(plaintext) + encryptor.finalize()
-        
-        # Return nonce + ciphertext
+        # Return nonce + ciphertext (ciphertext includes the 16-byte Poly1305 tag)
         return nonce + ciphertext
     
     def decrypt_chacha20(self, 
                         encrypted_data: bytes,
                         purpose: str = "default") -> bytes:
-        """Decrypt ChaCha20 encrypted data"""
+        """Decrypt ChaCha20-Poly1305 encrypted data"""
         
         # Split components
         nonce = encrypted_data[:self.CHACHA_NONCE_SIZE]
@@ -163,13 +162,16 @@ class EncryptionManager:
         # Derive decryption key
         decryption_key = self.derive_key(f"chacha:{purpose}", key_length=self.CHACHA_KEY_SIZE)
         
-        # Create cipher
-        cipher = Cipher(algorithms.ChaCha20(decryption_key, nonce), mode=None)
-        decryptor = cipher.decryptor()
+        # BUGFIX #14: Was using raw ChaCha20 (mode=None) without authentication.
+        # Now uses ChaCha20Poly1305 AEAD which verifies the Poly1305 tag.
+        from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+        aead = ChaCha20Poly1305(decryption_key)
         
-        # Decrypt
-        plaintext = decryptor.update(ciphertext) + decryptor.finalize()
-        return plaintext
+        try:
+            plaintext = aead.decrypt(nonce, ciphertext, None)
+            return plaintext
+        except Exception:
+            raise ValueError("Decryption failed: invalid authentication tag")
     
     def encrypt_string(self, 
                       plaintext: str,
