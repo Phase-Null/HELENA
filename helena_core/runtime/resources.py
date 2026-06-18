@@ -207,14 +207,34 @@ class ResourceManager:
             # Memory usage
             memory = psutil.virtual_memory()
             
+            # BUGFIX #11: disk_io was undefined (missing psutil.disk_io_counters() call);
+            # attribute names _last_disk_io/_last_io_time were wrong (should be last_disk_io/last_io_time);
+            # disk_io_mbps could be unassigned; network_io_mbps was never computed
+            disk_io_mbps = 0.0
+            network_io_mbps = 0.0
             now = time.time()
-            if disk_io and self._last_disk_io and self._last_io_time:
-                dt = now - self._last_io_time
-                if dt > 0:
-                    delta_bytes = (disk_io.read_bytes - self._last_disk_io.read_bytes)
-                    disk_io_mbps = (delta_bytes / dt) / (1024 * 1024)
-            self._last_disk_io = disk_io
-            self._last_io_time = now
+            try:
+                disk_io = psutil.disk_io_counters()
+                if disk_io and self.last_disk_io and self.last_io_time:
+                    dt = now - self.last_io_time
+                    if dt > 0:
+                        delta_bytes = (disk_io.read_bytes - self.last_disk_io.read_bytes)
+                        disk_io_mbps = (delta_bytes / dt) / (1024 * 1024)
+                self.last_disk_io = disk_io
+            except Exception:
+                pass
+            try:
+                net_io = psutil.net_io_counters()
+                if net_io and self.last_net_io and self.last_io_time:
+                    dt = now - self.last_io_time
+                    if dt > 0:
+                        delta_bytes = (net_io.bytes_sent + net_io.bytes_recv
+                                       - self.last_net_io.bytes_sent - self.last_net_io.bytes_recv)
+                        network_io_mbps = (delta_bytes / dt) / (1024 * 1024)
+                self.last_net_io = net_io
+            except Exception:
+                pass
+            self.last_io_time = now
             
             # GPU usage (if available)
             gpu_percent = 0.0
@@ -750,4 +770,5 @@ class ResourceManager:
                               if self.hardware.memory.total_mb > 0 else 0
             }
         }
+
 
