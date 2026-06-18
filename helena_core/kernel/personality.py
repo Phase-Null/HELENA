@@ -426,66 +426,79 @@ class PersonalityEngine:
         self, profile: PersonalityProfile, emotion: Dict[str, Any]
     ) -> PersonalityProfile:
         """Adjust the profile based on current emotion."""
-        dominant = emotion.get("dominant", "CALM")
+        # BUGFIX #10: default was "CALM" (uppercase) but emotion engine uses
+        # lowercase keys; also add .lower() to normalize any casing mismatch
+        dominant = emotion.get("dominant", "calm").lower()
         emotions = emotion.get("emotions", {})
         intensity = 0.0
         if isinstance(emotions, dict) and dominant in emotions:
             val = emotions[dominant]
             if isinstance(val, (int, float)):
                 intensity = float(val)
-        if dominant == "FRUSTRATION":
+        # BUGFIX #10: all emotion comparisons were UPPERCASE but dominant
+        # is now normalized to lowercase
+        if dominant == "frustration":
             profile.humor_frequency *= max(0.1, 1.0 - intensity)
             profile.patience = max(0.1, profile.patience - intensity * 0.3)
-        elif dominant == "ENTHUSIASM":
+        elif dominant == "enthusiasm":
             profile.humor_frequency *= 1.0 + intensity * 0.3
             profile.verbosity *= 1.0 + intensity * 0.2
-        elif dominant == "CURIOSITY":
+        elif dominant == "curiosity":
             profile.technical_depth = min(1.0, profile.technical_depth + intensity * 0.2)
-        elif dominant == "CONCERN":
+        elif dominant == "concern":
             profile.formality = min(1.0, profile.formality + intensity * 0.2)
             profile.humor_frequency *= max(0.2, 1.0 - intensity * 0.5)
-        elif dominant == "SATISFACTION":
+        elif dominant == "satisfaction":
             profile.humor_frequency *= 1.0 + intensity * 0.2
-        elif dominant == "DETERMINATION":
+        elif dominant == "determination":
             profile.verbosity *= max(0.5, 1.0 - intensity * 0.2)
-        elif dominant == "EMPATHY":
+        elif dominant == "empathy":
             profile.formality *= max(0.6, 1.0 - intensity * 0.2)
-        # CALM leaves profile unchanged
+        # calm leaves profile unchanged
         return profile
 
     def _emotion_commentary(self, emotion: Dict[str, Any]) -> Optional[str]:
         """Optional micro-comment reflecting current affect."""
-        dominant = emotion.get("dominant", "CALM")
-        intensity = emotion.get("intensity", 0.0)
+        # BUGFIX #10: default was "CALM" (uppercase); normalize to lowercase
+        dominant = emotion.get("dominant", "calm").lower()
+        # BUGFIX #10: intensity was read from wrong key "intensity" (doesn't exist);
+        # must be extracted from the nested emotions dict, same as _modulate_by_emotion
+        emotions = emotion.get("emotions", {})
+        intensity = 0.0
+        if isinstance(emotions, dict) and dominant in emotions:
+            val = emotions[dominant]
+            if isinstance(val, (int, float)):
+                intensity = float(val)
         if intensity < 0.3:
             return None  # too faint to mention
 
+        # BUGFIX #10: all dict keys were UPPERCASE but dominant is now lowercase
         comments: Dict[str, List[str]] = {
-            "CURIOSITY": [
+            "curiosity": [
                 "This is interesting.",
                 "I'd like to explore this further.",
             ],
-            "SATISFACTION": [
+            "satisfaction": [
                 "That went well.",
                 "Efficient outcome.",
             ],
-            "FRUSTRATION": [
+            "frustration": [
                 "This is proving difficult.",
                 "Not the result I expected.",
             ],
-            "CONCERN": [
+            "concern": [
                 "Flagging this for attention.",
                 "Worth monitoring.",
             ],
-            "ENTHUSIASM": [
+            "enthusiasm": [
                 "Looking forward to this.",
                 "This should be good.",
             ],
-            "DETERMINATION": [
+            "determination": [
                 "I'll get this done.",
                 "Persistence mode.",
             ],
-            "EMPATHY": [
+            "empathy": [
                 "I understand.",
                 "Noted, and acknowledged.",
             ],
