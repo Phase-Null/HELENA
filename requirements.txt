@@ -64,7 +64,7 @@ rich>=13.0.0
 # Optional: ONNX and OpenVINO (advanced)
 # onnxruntime>=1.15.0
 # openvino>=2023.0.0
-# Added for LLM and training
-llama-cpp-python>=0.2.0
-sentence-transformers>=2.2.2
+# BUGFIX #37: removed duplicate sentence-transformers (already listed above at line 24);
+# moved llama-cpp-python back to optional section where it belongs
+# llama-cpp-python>=0.2.0
 huggingface_hub>=0.20.0
