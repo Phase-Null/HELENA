@@ -18,6 +18,14 @@ That's it. AEGIS then starts automatically with HELENA.
 """
 
 
+# RE-AUDIT FIX (Bug #39): module-level guard used by _get_security_lock()
+# to make lazy lock initialisation thread-safe. Without this, two threads
+# racing on `if not hasattr(self, '_security_lock')` could each create
+# their own Lock and assign it, defeating mutual exclusion.
+import threading as _threading_mod
+_SECURITY_LOCK_INIT_GUARD = _threading_mod.Lock()
+
+
 # ════════════════════════════════════════════════════════════════════════
 # CHANGE 1 — helena_core/kernel/core.py
 #
@@ -110,9 +118,19 @@ def get_pending_security_alerts(self) -> list:
 def _get_security_lock(self):
     """Thread-safe lazy lock initialisation."""
     # BUGFIX #39: was using if-not-hasattr for lock creation which is racy
+    #
+    # RE-AUDIT FIX (Bug #39 was itself buggy): the original BUGFIX #39
+    # just moved the racy `if not hasattr(self, "_security_lock")` pattern
+    # into this helper method -- two threads could still each create their
+    # own Lock and assign it, so they would NOT mutually exclude. The
+    # correct fix is to use a module-level lock to serialise the lazy
+    # initialisation, guaranteeing only one Lock is ever published.
+    import threading
     if not hasattr(self, "_security_lock"):
-        import threading
-        self._security_lock = threading.Lock()
+        with _SECURITY_LOCK_INIT_GUARD:
+            # Double-checked locking: re-test inside the guard.
+            if not hasattr(self, "_security_lock"):
+                self._security_lock = threading.Lock()
     return self._security_lock
 '''
 
