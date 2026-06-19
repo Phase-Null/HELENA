@@ -11,6 +11,19 @@ from collections import defaultdict
 class TrainingDataset:
     """Persistent training dataset with categorized storage and retrieval."""
 
+    @staticmethod
+    def _safe_category(category: str) -> str:
+        """Sanitise a category name to prevent path traversal."""
+        # BUGFIX #28: category names were used directly in file paths,
+        # allowing path traversal (e.g. "../../../etc/exploit")
+        import re
+        # Keep only alphanumeric, underscore, hyphen, and dot
+        safe = re.sub(r'[^\w.\-]', '_', category)
+        # Remove leading dots to prevent hidden files / relative path tricks
+        safe = safe.lstrip('.')
+        # Fall back to 'general' if nothing remains
+        return safe or 'general'
+
     def __init__(self, storage_path: str, max_size: int = 10_000):
         self.storage_path = Path(storage_path).expanduser()
         self.storage_path.mkdir(parents=True, exist_ok=True)
@@ -21,6 +34,8 @@ class TrainingDataset:
     def add(self, item: Dict[str, Any], category: str = "general") -> None:
         """Add an item to the dataset under *category*."""
         item.setdefault("timestamp", time.time())
+        # BUGFIX #28: sanitize category to prevent path traversal on save
+        category = self._safe_category(category)
         bucket = self._data[category]
         bucket.append(item)
         if len(bucket) > self.max_size:
@@ -51,7 +66,7 @@ class TrainingDataset:
     def save(self) -> None:
         """Persist all data to disk as JSON files (one per category)."""
         for category, items in self._data.items():
-            path = self.storage_path / f"{category}.json"
+            path = self.storage_path / f"{self._safe_category(category)}.json"
             with open(path, "w") as fh:
                 json.dump(items, fh, indent=2, default=str)
 
