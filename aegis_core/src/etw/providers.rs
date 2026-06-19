@@ -115,7 +115,9 @@ pub const SUSPICIOUS_CMDLINE_FRAGMENTS: &[&str] = &[
     "downloadstring",
     "net user /add",
     "net localgroup administrators",
-    "reg add.*run",  // adding to Run key for persistence
+    // BUGFIX #15: "reg add.*run" was a regex pattern but is checked with contains(),
+    // so .* never matches. Changed to literal substring that works with contains().
+    "reg add",        // adding to Run key or RunOnce for persistence
     "schtasks /create",
     "bitsadmin /transfer",
 ];
