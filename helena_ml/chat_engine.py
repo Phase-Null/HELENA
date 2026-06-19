@@ -608,7 +608,8 @@ class ChatEngine:
                     f"Never refer to the operator as [User] or 'user'. "
                     f"If you do not remember something with certainty, say so honestly. "
                     f"Never, under any circumstances, guess or fabricate facts from previous conversations. "
-                    f"If asked about a previous session, say honestly that your cross-session memory is limited and ask them to re-provide the information, unless you can propperly remember. "
+                    # BUGFIX #29: typo "propperly" → "properly"
+                    f"If asked about a previous session, say honestly that your cross-session memory is limited and ask them to re-provide the information, unless you can properly remember. "
                     f"Do not recite your architecture or technical specs unless explicitly asked. "
                     f"Vary your response style significantly. Do not open or close responses the same way twice in a row. "
                     f"Avoid repeatedly starting with 'As HELENA' or 'As an AI' — use it occasionally if natural, not as a default. "
@@ -719,9 +720,12 @@ class ChatEngine:
             return self._web_search_response(user_message)
 
         # Direct shortcuts — no need to ask the LLM for these
+        # BUGFIX #16: _code_editor can be None if no code editor was provided;
+        # was calling .list_files() on None causing AttributeError
         if any(p in msg_lower for p in ("list your files", "list your source", "list source files", "list all files", "list files")):
-            result = self._code_editor.list_files()
-            return "Here are my source files:\n\n" + "\n".join(result["files"])
+            if self._code_editor is not None:
+                result = self._code_editor.list_files()
+                return "Here are my source files:\n\n" + "\n".join(result["files"])
 
         # Ask the LLM to classify the intent as a tool call
         decision_prompt = (
@@ -767,10 +771,13 @@ class ChatEngine:
                 return None
 
             ce = self._code_editor
+            # BUGFIX #16: ce (self._code_editor) can be None
+            if ce is None:
+                return None
 
             if tool == "code_read":
                 path = decision.get("path", "")
-                if not path or not (self._code_editor.root / path).exists():
+                if not path or not (ce.root / path).exists():
                     result = ce.list_files()
                     return "I'm not sure which file you meant. Here's what I have:\n\n" + "\n".join(result["files"])
                 result = ce.read_file(path)
