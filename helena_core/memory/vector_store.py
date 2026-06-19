@@ -218,8 +218,10 @@ class VectorStore:
                         results['metadatas'][0],
                         results['distances'][0]
                     )):
-                        # Convert distance to similarity (1 - distance)
-                        similarity = 1.0 - dist
+                        # BUGFIX #17: similarity = 1.0 - dist is only valid for cosine distance;
+                        # ChromaDB default metric is L2, where 1-dist can go negative.
+                        # Use the standard L2→similarity conversion: 1/(1+d)
+                        similarity = 1.0 / (1.0 + dist)
                         
                         if similarity >= threshold:
                             memories.append({
