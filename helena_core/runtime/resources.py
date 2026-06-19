@@ -15,6 +15,12 @@ from .hardware import get_hardware_detector, HardwareProfile
 
 logger = logging.getLogger(__name__)
 
+# BUGFIX #21b (systematic): this file uses logging.getLogger(__name__),
+# so logger.info("Component", "msg") passes "msg" as a logging format
+# arg, which is silently dropped (or raises TypeError when there is no
+# %s placeholder). All two-arg calls below have been rewritten as
+# logger.LEVEL("Component: msg") to match the BUGFIX #21 convention
+# already applied in hardware.py.
 class ResourceType(Enum):
     """Types of system resources"""
     CPU = auto()
@@ -109,7 +115,7 @@ class ResourceManager:
         self.last_net_io = None
         self.last_io_time = None
         
-        logger.info("ResourceManager", "Resource manager initialized")
+        logger.info("ResourceManager: Resource manager initialized")
     
     def _create_default_limits(self) -> List[ResourceLimit]:
         """Create default resource limits"""
@@ -153,7 +159,7 @@ class ResourceManager:
         )
         self.monitoring_thread.start()
         
-        logger.info("ResourceManager", "Resource monitoring started")
+        logger.info("ResourceManager: Resource monitoring started")
     
     def stop_monitoring(self):
         """Stop resource monitoring"""
@@ -161,7 +167,7 @@ class ResourceManager:
         if self.monitoring_thread:
             self.monitoring_thread.join(timeout=5)
         
-        logger.info("ResourceManager", "Resource monitoring stopped")
+        logger.info("ResourceManager: Resource monitoring stopped")
     
     def _monitoring_loop(self):
         """Main monitoring loop"""
@@ -195,7 +201,7 @@ class ResourceManager:
                 time.sleep(self.update_interval)
                 
             except Exception as e:
-                logger.error("ResourceManager", f"Monitoring loop error: {e}")
+                logger.error(f"ResourceManager: Monitoring loop error: {e}")
                 time.sleep(5)  # Wait before retry
     
     def _update_system_usage(self):
@@ -269,7 +275,7 @@ class ResourceManager:
             )
             
         except Exception as e:
-            logger.error("ResourceManager", f"Failed to update system usage: {e}")
+            logger.error(f"ResourceManager: Failed to update system usage: {e}")
     
     def _update_process_usage(self):
         """Update resource usage for managed processes"""
@@ -303,7 +309,7 @@ class ResourceManager:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 processes_to_remove.append(pid)
             except Exception as e:
-                logger.warning("ResourceManager", f"Failed to update process {pid}: {e}")
+                logger.warning(f"ResourceManager: Failed to update process {pid}: {e}")
         
         # Remove dead processes
         for pid in processes_to_remove:
@@ -436,7 +442,7 @@ class ResourceManager:
                     self.active_throttles[pid].append(action)
                     
             except Exception as e:
-                logger.error("ResourceManager", f"Failed to throttle process {pid}: {e}")
+                logger.error(f"ResourceManager: Failed to throttle process {pid}: {e}")
         
         return {
             'action': 'throttle',
@@ -482,7 +488,7 @@ class ResourceManager:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
         except Exception as e:
-            logger.error("ResourceManager", f"Failed to throttle process {pid}: {e}")
+            logger.error(f"ResourceManager: Failed to throttle process {pid}: {e}")
         
         return None
     
@@ -515,10 +521,10 @@ class ResourceManager:
                     'resource_usage': usage
                 })
                 
-                logger.warning("ResourceManager", f"Suspended process {pid} ({process_info.name})")
+                logger.warning(f"ResourceManager: Suspended process {pid} ({process_info.name})")
                 
             except Exception as e:
-                logger.error("ResourceManager", f"Failed to suspend process {pid}: {e}")
+                logger.error(f"ResourceManager: Failed to suspend process {pid}: {e}")
         
         return {
             'action': 'suspend',
@@ -556,10 +562,10 @@ class ResourceManager:
                     # Remove from tracking
                     self._remove_process(pid)
                     
-                    logger.warning("ResourceManager", f"Killed process {pid} ({process_info.name})")
+                    logger.warning(f"ResourceManager: Killed process {pid} ({process_info.name})")
                     
                 except Exception as e:
-                    logger.error("ResourceManager", f"Failed to kill process {pid}: {e}")
+                    logger.error(f"ResourceManager: Failed to kill process {pid}: {e}")
         
         return {
             'action': 'kill',
@@ -636,12 +642,12 @@ class ResourceManager:
             )
             
             self.processes[pid] = process_info
-            logger.debug("ResourceManager", f"Registered process {pid} ({name})")
+            logger.debug(f"ResourceManager: Registered process {pid} ({name})")
             
             return True
             
         except Exception as e:
-            logger.error("ResourceManager", f"Failed to register process {pid}: {e}")
+            logger.error(f"ResourceManager: Failed to register process {pid}: {e}")
             return False
     
     def unregister_process(self, pid: int) -> bool:
@@ -653,7 +659,7 @@ class ResourceManager:
             if pid in self.active_throttles:
                 del self.active_throttles[pid]
             
-            logger.debug("ResourceManager", f"Unregistered process {pid}")
+            logger.debug(f"ResourceManager: Unregistered process {pid}")
             return True
         
         return False
@@ -677,17 +683,17 @@ class ResourceManager:
                     process_info.suspended = False
                     resumed.append(pid)
                     
-                    logger.info("ResourceManager", f"Resumed process {pid}")
+                    logger.info(f"ResourceManager: Resumed process {pid}")
                     
                 except Exception as e:
-                    logger.error("ResourceManager", f"Failed to resume process {pid}: {e}")
+                    logger.error(f"ResourceManager: Failed to resume process {pid}: {e}")
         
         return resumed
     
     def set_limits(self, limits: List[ResourceLimit]):
         """Set custom resource limits"""
         self.limits = limits.copy()
-        logger.info("ResourceManager", f"Set {len(limits)} custom limits")
+        logger.info(f"ResourceManager: Set {len(limits)} custom limits")
     
     def add_limit(self, limit: ResourceLimit):
         """Add a single resource limit"""
