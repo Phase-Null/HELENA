@@ -176,7 +176,9 @@ class HardwareDetector:
                 return self.profile
         
         try:
-            logger.info("HardwareDetector", "Starting hardware detection")
+            # BUGFIX #21: logger.info("HardwareDetector", "msg") passes two positional
+            # args, but standard logging treats the second as format *args; merge into one string
+            logger.info("HardwareDetector: Starting hardware detection")
             
             # Detect CPU
             cpu_info = self._detect_cpu()
@@ -217,12 +219,12 @@ class HardwareDetector:
             )
             
             self.cache_time = time.time()
-            logger.info("HardwareDetector", "Hardware detection completed")
+            logger.info("HardwareDetector: Hardware detection completed")
             
             return self.profile
             
         except Exception as e:
-            logger.error("HardwareDetector", f"Hardware detection failed: {e}")
+            logger.error("HardwareDetector: Hardware detection failed: %s", e)
             # Return minimal profile
             return self._create_minimal_profile()
     
@@ -238,7 +240,7 @@ class HardwareDetector:
             else:
                 return self._detect_cpu_generic()
         except Exception as e:
-            logger.error("HardwareDetector", f"CPU detection failed: {e}")
+            logger.error("HardwareDetector: CPU detection failed: %s", e)
             return self._detect_cpu_generic()
     
     def _detect_cpu_windows(self) -> CPUInfo:
@@ -539,7 +541,7 @@ class HardwareDetector:
                         supports_cuda=platform_type == GPUPlatform.NVIDIA
                     ))
             except Exception as e:
-                logger.error("HardwareDetector", f"Windows GPU detection failed: {e}")
+                logger.error("HardwareDetector: Windows GPU detection failed: %s", e)
         
         return gpus
     
@@ -581,7 +583,7 @@ class HardwareDetector:
                             vram_gb = float(line.split(':')[-1].strip().split()[0])
                             current_gpu.memory_total_mb = int(vram_gb * 1024)
             except Exception as e:
-                logger.error("HardwareDetector", f"macOS GPU detection failed: {e}")
+                logger.error("HardwareDetector: macOS GPU detection failed: %s", e)
         
         return gpus
     
@@ -617,7 +619,7 @@ class HardwareDetector:
                         supports_cuda=platform_type == GPUPlatform.NVIDIA
                     ))
         except Exception as e:
-            logger.error("HardwareDetector", f"Linux GPU detection failed: {e}")
+            logger.error("HardwareDetector: Linux GPU detection failed: %s", e)
         
         return gpus
     
@@ -644,7 +646,7 @@ class HardwareDetector:
                 swap_used_mb=swap.used // (1024 * 1024)
             )
         except Exception as e:
-            logger.error("HardwareDetector", f"Memory detection failed: {e}")
+            logger.error("HardwareDetector: Memory detection failed: %s", e)
             return MemoryInfo(0, 0, 0, 0, 0)
     
     def _detect_storage(self) -> List[StorageInfo]:
@@ -681,7 +683,7 @@ class HardwareDetector:
             return storage_devices
             
         except Exception as e:
-            logger.error("HardwareDetector", f"Storage detection failed: {e}")
+            logger.error("HardwareDetector: Storage detection failed: %s", e)
             return []
     
     def _is_ssd_windows(self, device_path: str) -> Optional[bool]:
@@ -794,7 +796,7 @@ class HardwareDetector:
             return interfaces
             
         except Exception as e:
-            logger.error("HardwareDetector", f"Network detection failed: {e}")
+            logger.error("HardwareDetector: Network detection failed: %s", e)
             return []
     
     def _detect_power(self) -> Optional[Dict[str, Any]]:
