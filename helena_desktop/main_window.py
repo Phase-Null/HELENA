@@ -241,12 +241,18 @@ class MainWindow(QMainWindow):
         self._right.log(f"[FILE] {path}", "info")
         # Route file content to chat engine as context
         try:
-            content = open(path, 'r', encoding='utf-8', errors='replace').read()[:2000]
-            self.kernel.submit_task(
-                command="chat",
-                parameters={"message": f"[File loaded: {path}]\n\n{content[:500]}..."},
-                source="operator"
-            )
+            # BUGFIX #35: was open().read()[:2000] which leaks the file handle and
+            # reads the entire file before truncating (OOM risk). Now uses with-statement
+            # and reads only up to 2000 chars.
+            content = None
+            with open(path, 'r', encoding='utf-8', errors='replace') as fh:
+                content = fh.read(2000)
+            if content is not None:
+                self.kernel.submit_task(
+                    command="chat",
+                    parameters={"message": f"[File loaded: {path}]\n\n{content[:500]}..."},
+                    source="operator"
+                )
         except Exception as e:
             self._right.log(f"[ERR] could not read file: {e}", "error")
  
