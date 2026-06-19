@@ -83,12 +83,11 @@ def inject_security_alert(self, message: str) -> None:
     Adds the alert to a queue — HELENA surfaces it in her next response.
     Thread-safe.
     """
+    # BUGFIX #39: lock was created inside if-not-hasattr which is thread-unsafe;
+    # two threads could create separate locks. Now always access via _get_security_lock().
     if not hasattr(self, "_security_alerts"):
         self._security_alerts = []
-    import threading
-    if not hasattr(self, "_security_lock"):
-        self._security_lock = threading.Lock()
-    with self._security_lock:
+    with self._get_security_lock():
         self._security_alerts.append(message)
         # Cap queue at 10 — oldest alerts drop if HELENA is overwhelmed
         if len(self._security_alerts) > 10:
@@ -100,15 +99,21 @@ def get_pending_security_alerts(self) -> list:
     any queued security alerts and prepend them to context.
     Clears the queue after reading.
     """
+    # BUGFIX #39: use thread-safe lock accessor instead of racy if-not-hasattr
     if not hasattr(self, "_security_alerts"):
         return []
-    import threading
-    if not hasattr(self, "_security_lock"):
-        self._security_lock = threading.Lock()
-    with self._security_lock:
+    with self._get_security_lock():
         alerts = list(self._security_alerts)
         self._security_alerts.clear()
     return alerts
+
+def _get_security_lock(self):
+    """Thread-safe lazy lock initialisation."""
+    # BUGFIX #39: was using if-not-hasattr for lock creation which is racy
+    if not hasattr(self, "_security_lock"):
+        import threading
+        self._security_lock = threading.Lock()
+    return self._security_lock
 '''
 
 
