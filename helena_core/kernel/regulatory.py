@@ -156,8 +156,13 @@ class RegulatoryCore:
         params_str = str(params).lower()
 
         for rule in self._rules.values():
-            if not rule.enabled:
+            # BUGFIX #18: Don't skip disabled operator rules — their enforcement
+            # logic needs to fire (they generate violations when disabled).
+            # Only skip disabled advisory rules.
+            if not rule.enabled and rule.level == RuleLevel.ADVISORY:
                 continue
+            if not rule.enabled and rule.level == RuleLevel.ABSOLUTE:
+                continue  # absolute rules are always enabled anyway
             violation = self._evaluate_rule(rule, command, params, params_str)
             if violation is not None:
                 violations.append(violation)
@@ -207,23 +212,34 @@ class RegulatoryCore:
                                  command, "Regulatory weakening attempted", blocked=True)
 
         # ── Operator rules ────────────────────────────────────────
-        if rule.id == "OPR-001" and not rule.enabled:
+        # BUGFIX #18: These checks had `and not rule.enabled`, which is dead code
+        # because check() already skips disabled rules. Now the logic is inverted:
+        # when an operator rule is enabled, the action is allowed (no violation).
+        # When the rule reaches here (it's enabled), we check if a restricted
+        # action is attempted — but since the rule IS enabled, the action IS allowed,
+        # so we only flag if the operator rule is explicitly checked.
+        # The real enforcement happens when these rules are DISABLED: the check()
+        # loop must NOT skip disabled operator rules that enforce restrictions.
+        # We fix this by moving operator-rule enforcement OUTSIDE the enabled check.
+        if rule.id == "OPR-001":
             if "network_scan" in command or "port_scan" in params_str:
-                return Violation(rule.id, rule.description, rule.level,
-                                 command, "Network scanning not enabled by operator")
+                if not rule.enabled:
+                    return Violation(rule.id, rule.description, rule.level,
+                                     command, "Network scanning not enabled by operator")
 
-        if rule.id == "OPR-004" and not rule.enabled:
+        if rule.id == "OPR-004":
             target = params.get("path", "")
             if isinstance(target, str) and target and not target.startswith("."):
-                # Heuristic: absolute path outside project
                 if target.startswith("/") and "helena" not in target.lower():
-                    return Violation(rule.id, rule.description, rule.level,
-                                     command, "Write outside project tree")
+                    if not rule.enabled:
+                        return Violation(rule.id, rule.description, rule.level,
+                                         command, "Write outside project tree")
 
-        if rule.id == "OPR-005" and not rule.enabled:
+        if rule.id == "OPR-005":
             if "load_module" in command and params.get("source") == "untrusted":
-                return Violation(rule.id, rule.description, rule.level,
-                                 command, "Untrusted module loading not allowed")
+                if not rule.enabled:
+                    return Violation(rule.id, rule.description, rule.level,
+                                     command, "Untrusted module loading not allowed")
 
         return None
 
