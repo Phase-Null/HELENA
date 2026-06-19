@@ -200,6 +200,14 @@ impl Agent for NetworkMonitor {
     fn scan(&self, context: &SharedContext) -> Vec<Finding> {
         let mut findings = Vec::new();
 
+        // BUGFIX #22: create System once per scan, not once per PID
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(
+            ProcessesToUpdate::All,
+            true,
+            ProcessRefreshKind::everything(),
+        );
+
         let sockets = match get_sockets_info(
             AddressFamilyFlags::IPV4 | AddressFamilyFlags::IPV6,
             ProtocolFlags::TCP,
@@ -224,7 +232,7 @@ impl Agent for NetworkMonitor {
             if remote_addr.starts_with("127.") || remote_addr == "::1" { continue; }
 
             let pid = pid.unwrap_or(0);
-            let (process_name, exe_path) = get_process_info(pid);
+            let (process_name, exe_path) = get_process_info(&sys, pid);
 
             // ── Check 1: suspicious port ──────────────────────────────────────
             if self.suspicious_ports.contains(&remote_port)
@@ -280,15 +288,10 @@ impl Agent for NetworkMonitor {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn get_process_info(pid: u32) -> (String, String) {
+// BUGFIX #22: System::new() was called per PID, which is expensive.
+// Now the System instance is created once in scan() and passed by reference.
+fn get_process_info(sys: &System, pid: u32) -> (String, String) {
     if pid == 0 { return ("unknown".to_string(), String::new()); }
-
-    let mut sys = System::new();
-    sys.refresh_processes_specifics(
-        ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
-        true,
-        ProcessRefreshKind::everything(),
-    );
 
     if let Some(proc) = sys.process(sysinfo::Pid::from_u32(pid)) {
         let name = proc.name().to_string_lossy().to_lowercase();
