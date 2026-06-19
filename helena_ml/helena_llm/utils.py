@@ -5,7 +5,7 @@ Compatibility helpers and shared components.
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# BUGFIX #30: removed unused import "import torch.nn.functional as F"
  
  
 class RMSNorm(nn.Module):
