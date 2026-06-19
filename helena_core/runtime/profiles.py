@@ -15,6 +15,12 @@ from .resources import ResourceManager, ResourceLimit, ResourceType
 
 logger = logging.getLogger(__name__)
 
+# BUGFIX #21b (systematic): this file uses logging.getLogger(__name__),
+# so logger.info("Component", "msg") passes "msg" as a logging format
+# arg, which is silently dropped (or raises TypeError when there is no
+# %s placeholder). All two-arg calls below have been rewritten as
+# logger.LEVEL("Component: msg") to match the BUGFIX #21 convention
+# already applied in hardware.py.
 class PerformanceProfile(Enum):
     """Performance profile types"""
     IDLE = auto()           # Minimal resources, power saving
@@ -86,7 +92,7 @@ class ProfileManager:
         self.monitoring_active = False
         self.monitoring_thread: Optional[threading.Thread] = None
         
-        logger.info("ProfileManager", "Profile manager initialized")
+        logger.info("ProfileManager: Profile manager initialized")
     
     def _initialize_profiles(self):
         """Initialize default performance profiles"""
@@ -202,7 +208,7 @@ class ProfileManager:
         )
         self.monitoring_thread.start()
         
-        logger.info("ProfileManager", "Profile monitoring started")
+        logger.info("ProfileManager: Profile monitoring started")
     
     def stop_monitoring(self):
         """Stop profile monitoring"""
@@ -210,7 +216,7 @@ class ProfileManager:
         if self.monitoring_thread:
             self.monitoring_thread.join(timeout=5)
         
-        logger.info("ProfileManager", "Profile monitoring stopped")
+        logger.info("ProfileManager: Profile monitoring stopped")
     
     def _monitoring_loop(self):
         """Monitor system and auto-switch profiles"""
@@ -233,7 +239,7 @@ class ProfileManager:
                 time.sleep(5)  # Check every 5 seconds
                 
             except Exception as e:
-                logger.error("ProfileManager", f"Monitoring loop error: {e}")
+                logger.error(f"ProfileManager: Monitoring loop error: {e}")
                 time.sleep(10)  # Wait longer on error
     
     def _check_gaming_activity(self):
@@ -408,7 +414,7 @@ class ProfileManager:
         """Switch to a new performance profile"""
         with self.profile_lock:
             if new_profile not in self.profiles and new_profile != PerformanceProfile.CUSTOM:
-                logger.error("ProfileManager", f"Unknown profile: {new_profile}")
+                logger.error(f"ProfileManager: Unknown profile: {new_profile}")
                 return False
             
             if new_profile == self.current_profile:
@@ -461,7 +467,7 @@ class ProfileManager:
                              configuration: ProfileConfiguration) -> bool:
         """Create a custom performance profile"""
         if name in self.custom_profiles:
-            logger.warning("ProfileManager", f"Custom profile '{name}' already exists")
+            logger.warning(f"ProfileManager: Custom profile '{name}' already exists")
             return False
         
         self.custom_profiles[name] = configuration
@@ -469,7 +475,7 @@ class ProfileManager:
         # Create a profile entry for switching
         profile_id = PerformanceProfile.CUSTOM
         
-        logger.info("ProfileManager", f"Created custom profile: {name}")
+        logger.info(f"ProfileManager: Created custom profile: {name}")
         return True
     
     def update_custom_profile(self, 
@@ -486,14 +492,14 @@ class ProfileManager:
             if hasattr(profile, key):
                 setattr(profile, key, value)
         
-        logger.info("ProfileManager", f"Updated custom profile: {name}")
+        logger.info(f"ProfileManager: Updated custom profile: {name}")
         return True
     
     def delete_custom_profile(self, name: str) -> bool:
         """Delete a custom profile"""
         if name in self.custom_profiles:
             del self.custom_profiles[name]
-            logger.info("ProfileManager", f"Deleted custom profile: {name}")
+            logger.info(f"ProfileManager: Deleted custom profile: {name}")
             return True
         return False
     
@@ -605,7 +611,7 @@ class ProfileManager:
                     if hasattr(config, key):
                         setattr(config, key, value)
                 
-                logger.info("ProfileManager", f"Imported standard profile: {profile_id}")
+                logger.info(f"ProfileManager: Imported standard profile: {profile_id}")
                 return True
                 
             except KeyError:
@@ -617,12 +623,12 @@ class ProfileManager:
                     config = ProfileConfiguration(**config_data)
                     self.custom_profiles[name] = config
                     
-                    logger.info("ProfileManager", f"Imported custom profile: {name}")
+                    logger.info(f"ProfileManager: Imported custom profile: {name}")
                     return True
             
             return False
             
         except Exception as e:
-            logger.error("ProfileManager", f"Failed to import profile: {e}")
+            logger.error(f"ProfileManager: Failed to import profile: {e}")
             return False
 
