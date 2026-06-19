@@ -2,7 +2,7 @@
 Improvement generator – proposes real code changes based on patterns.
 """
 import time
-import random
+# BUGFIX #32: removed unused import "import random"
 from typing import List, Dict, Any
 
 from helena_core.utils.logging import get_logger
