@@ -148,7 +148,13 @@ class AutonomousTrainer:
             return {"status": "error", "message": str(e)}
 
         finally:
-            self.active_session = False
+            # RE-AUDIT FIX (Bug #26 incomplete): the original BUGFIX #26
+            # protected is_training() and the start of start_session() with
+            # self.lock, but this finally-block wrote active_session=False
+            # WITHOUT the lock -- re-introducing the exact race condition
+            # the fix was supposed to eliminate. Acquire the lock here too.
+            with self.lock:
+                self.active_session = False
 
     def _collect_data(self, focus_areas):
         data = {
@@ -165,9 +171,15 @@ class AutonomousTrainer:
         return data
 
     def get_status(self) -> Dict[str, Any]:
+        # RE-AUDIT FIX (Bug #26 incomplete): active_session was read here
+        # without the lock, inconsistent with the lock-protected reads in
+        # is_training() and writes in start_session(). Acquire the lock for
+        # a consistent locking discipline.
+        with self.lock:
+            active_session = self.active_session
         return {
             'enabled': self.enabled,
-            'active_session': self.active_session,
+            'active_session': active_session,
             'last_session_time': self.last_session_time,
             'improvement_stats': self.improvement_log.calculate_total_impact(),
             'dataset_stats': self.dataset.get_statistics(),
