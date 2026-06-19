@@ -155,7 +155,9 @@ fn build_kernel_process_trace(
                             severity:     0.85,
                             detail: format!(
                                 "ETW: Suspicious cmdline PID {}: {}",
-                                pid, &cmdline[..cmdline.len().min(150)]
+                                // BUGFIX #15/34: byte-slicing a UTF-8 String can panic on
+                                // multi-byte characters; use char-boundary-safe truncation
+                                pid, truncate_str(&cmdline, 150)
                             ),
                             data: serde_json::json!({
                                 "pid": pid, "cmdline": cmdline, "matched": frag,
@@ -228,7 +230,9 @@ fn build_dns_trace(
                         severity:     0.75,
                         detail: format!(
                             "ETW: Suspicious DNS: {} → {} (status {})",
-                            name, &results[..results.len().min(80)], status
+                            // BUGFIX #15/34: byte-slicing a UTF-8 String can panic on
+                            // multi-byte characters; use char-boundary-safe truncation
+                            name, truncate_str(&results, 80), status
                         ),
                         data: serde_json::json!({
                             "query_name": name, "query_status": status,
@@ -301,4 +305,20 @@ fn push_findings(
         threat_level: severity_to_threat(max_sev),
         findings,
     });
+}
+
+// ── Safe string truncation ─────────────────────────────────────────────────
+
+/// Truncate a string to at most `max_bytes` bytes, respecting char boundaries.
+/// BUGFIX #15/34: This replaces raw byte-slicing (&s[..n]) which panics
+/// on multi-byte UTF-8 characters.
+fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut boundary = max_bytes;
+    while boundary > 0 && !s.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    &s[..boundary]
 }
