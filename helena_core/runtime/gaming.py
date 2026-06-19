@@ -15,6 +15,12 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# BUGFIX #21b (systematic): this file uses logging.getLogger(__name__),
+# so logger.info("Component", "msg") passes "msg" as a logging format
+# arg, which is silently dropped (or raises TypeError when there is no
+# %s placeholder). All two-arg calls below have been rewritten as
+# logger.LEVEL("Component: msg") to match the BUGFIX #21 convention
+# already applied in hardware.py.
 class GamingDetectionMethod(Enum):
     """Methods for detecting gaming activity"""
     PROCESS_NAME = auto()
@@ -98,7 +104,7 @@ class GamingOptimizer:
         self.on_game_ended: Optional[Callable] = None
         self.on_optimization_applied: Optional[Callable] = None
         
-        logger.info("GamingOptimizer", "Gaming optimizer initialized")
+        logger.info("GamingOptimizer: Gaming optimizer initialized")
     
     def _load_default_game_profiles(self):
         """Load default game profiles"""
@@ -183,7 +189,7 @@ class GamingOptimizer:
         )
         self.monitoring_thread.start()
         
-        logger.info("GamingOptimizer", "Gaming monitoring started")
+        logger.info("GamingOptimizer: Gaming monitoring started")
     
     def stop_monitoring(self):
         """Stop gaming detection"""
@@ -195,7 +201,7 @@ class GamingOptimizer:
         if self.active_session:
             self._end_gaming_session()
         
-        logger.info("GamingOptimizer", "Gaming monitoring stopped")
+        logger.info("GamingOptimizer: Gaming monitoring stopped")
     
     def _monitoring_loop(self):
         """Monitor for gaming activity"""
@@ -210,7 +216,7 @@ class GamingOptimizer:
                 time.sleep(self.check_interval)
                 
             except Exception as e:
-                logger.error("GamingOptimizer", f"Monitoring loop error: {e}")
+                logger.error(f"GamingOptimizer: Monitoring loop error: {e}")
                 time.sleep(10)
     
     def _check_for_gaming(self):
@@ -280,7 +286,7 @@ class GamingOptimizer:
                     continue
                     
         except Exception as e:
-            logger.error("GamingOptimizer", f"Game detection failed: {e}")
+            logger.error(f"GamingOptimizer: Game detection failed: {e}")
         
         return detected
     
@@ -308,7 +314,7 @@ class GamingOptimizer:
                              game_profile: GameProfile,
                              process_ids: Set[int]):
         """Start a new gaming session"""
-        logger.info("GamingOptimizer", f"Game detected: {game_profile.name}")
+        logger.info(f"GamingOptimizer: Game detected: {game_profile.name}")
         
         # Store original profile
         current_profile = self.profile_manager.get_current_profile()
@@ -367,7 +373,7 @@ class GamingOptimizer:
                     session.suspended_modules.append(module_name)
                     optimizations_applied.append(f"suspend_module:{module_name}")
                 except Exception as e:
-                    logger.warning("GamingOptimizer", f"Failed to suspend module {module_name}: {e}")
+                    logger.warning(f"GamingOptimizer: Failed to suspend module {module_name}: {e}")
         
         # Adjust process priorities for game processes
         for pid in session.process_ids:
@@ -409,8 +415,7 @@ class GamingOptimizer:
         if self.on_optimization_applied:
             self.on_optimization_applied(session.game, optimizations_applied)
         
-        logger.info("GamingOptimizer", 
-                   f"Applied {len(optimizations_applied)} optimizations for {session.game.name}")
+        logger.info(f"GamingOptimizer: Applied {len(optimizations_applied)} optimizations for {session.game.name}")
     
     def _optimize_for_gaming(self):
         """Continuously optimize for active gaming session"""
@@ -432,7 +437,7 @@ class GamingOptimizer:
                 self._relax_optimizations()
                 
         except Exception as e:
-            logger.error("GamingOptimizer", f"Optimization monitoring failed: {e}")
+            logger.error(f"GamingOptimizer: Optimization monitoring failed: {e}")
     
     def _calculate_performance_impact(self, usage) -> float:
         """Calculate gaming performance impact (0-1 scale)"""
@@ -472,7 +477,7 @@ class GamingOptimizer:
                 try:
                     self.module_manager.suspend_module(module_name)
                     self.active_session.suspended_modules.append(module_name)
-                    logger.debug("GamingOptimizer", f"Aggressively suspended: {module_name}")
+                    logger.debug(f"GamingOptimizer: Aggressively suspended: {module_name}")
                 except Exception:
                     pass
     
@@ -489,7 +494,7 @@ class GamingOptimizer:
                 try:
                     self.module_manager.resume_module(module_name)
                     self.active_session.suspended_modules.remove(module_name)
-                    logger.debug("GamingOptimizer", f"Resumed: {module_name}")
+                    logger.debug(f"GamingOptimizer: Resumed: {module_name}")
                 except Exception:
                     pass
     
@@ -498,7 +503,7 @@ class GamingOptimizer:
         if not self.active_session:
             return
         
-        logger.info("GamingOptimizer", f"Game ended: {self.active_session.game.name}")
+        logger.info(f"GamingOptimizer: Game ended: {self.active_session.game.name}")
         
         # Restore original profile
         if self.active_session.original_profile:
@@ -522,7 +527,7 @@ class GamingOptimizer:
                 try:
                     self.module_manager.resume_module(module_name)
                 except Exception as e:
-                    logger.warning("GamingOptimizer", f"Failed to resume module {module_name}: {e}")
+                    logger.warning(f"GamingOptimizer: Failed to resume module {module_name}: {e}")
         
         # Restore process priorities
         for pid in self.active_session.process_ids:
@@ -550,18 +555,18 @@ class GamingOptimizer:
     def add_game_profile(self, profile: GameProfile) -> bool:
         """Add a custom game profile"""
         if profile.name.lower() in self.game_profiles:
-            logger.warning("GamingOptimizer", f"Game profile '{profile.name}' already exists")
+            logger.warning(f"GamingOptimizer: Game profile '{profile.name}' already exists")
             return False
         
         self.game_profiles[profile.name.lower()] = profile
-        logger.info("GamingOptimizer", f"Added game profile: {profile.name}")
+        logger.info(f"GamingOptimizer: Added game profile: {profile.name}")
         return True
     
     def remove_game_profile(self, game_name: str) -> bool:
         """Remove a game profile"""
         if game_name.lower() in self.game_profiles:
             del self.game_profiles[game_name.lower()]
-            logger.info("GamingOptimizer", f"Removed game profile: {game_name}")
+            logger.info(f"GamingOptimizer: Removed game profile: {game_name}")
             return True
         return False
     
@@ -601,7 +606,7 @@ class GamingOptimizer:
         """Manually start gaming optimization for a game"""
         profile = self.get_game_profile(game_name)
         if not profile:
-            logger.error("GamingOptimizer", f"No profile found for game: {game_name}")
+            logger.error(f"GamingOptimizer: No profile found for game: {game_name}")
             return False
         
         # Find running process
@@ -616,7 +621,7 @@ class GamingOptimizer:
                 continue
         
         if not process_ids:
-            logger.warning("GamingOptimizer", f"No running processes found for {game_name}")
+            logger.warning(f"GamingOptimizer: No running processes found for {game_name}")
             return False
         
         self._start_gaming_session(profile, process_ids)
@@ -656,6 +661,6 @@ class GamingOptimizer:
             profile = GameProfile(**profile_data)
             return self.add_game_profile(profile)
         except Exception as e:
-            logger.error("GamingOptimizer", f"Failed to import game profile: {e}")
+            logger.error(f"GamingOptimizer: Failed to import game profile: {e}")
             return False
 
