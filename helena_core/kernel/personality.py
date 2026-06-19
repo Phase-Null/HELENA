@@ -427,12 +427,24 @@ class PersonalityEngine:
     ) -> PersonalityProfile:
         """Adjust the profile based on current emotion."""
         # BUGFIX #10: default was "CALM" (uppercase) but emotion engine uses
-        # lowercase keys; also add .lower() to normalize any casing mismatch
-        dominant = emotion.get("dominant", "calm").lower()
+        # lowercase keys; also add .lower() to normalize any casing mismatch.
+        #
+        # RE-AUDIT FIX (Bug #10 regression): the emotions dict returned by
+        # EmotionEngine.get_state() uses UPPERCASE keys (e.g. "CURIOSITY")
+        # because it is keyed by Emotion.NAME.name. The original BUGFIX #10
+        # lowercased `dominant` but left the emotions dict keys UPPERCASE,
+        # so `dominant in emotions` was ALWAYS False and intensity was ALWAYS
+        # 0.0 -- making emotion modulation a complete no-op (the exact bug
+        # the fix was supposed to eliminate). We now look up the intensity
+        # using the UPPERCASE dominant key, while keeping the comparison
+        # branches lowercase for readability.
+        dominant_raw = emotion.get("dominant", "CALM")
+        dominant = dominant_raw.lower() if isinstance(dominant_raw, str) else "calm"
         emotions = emotion.get("emotions", {})
         intensity = 0.0
-        if isinstance(emotions, dict) and dominant in emotions:
-            val = emotions[dominant]
+        # The emotions dict is keyed by Emotion.name -> UPPERCASE.
+        if isinstance(emotions, dict):
+            val = emotions.get(dominant.upper(), emotions.get(dominant))
             if isinstance(val, (int, float)):
                 intensity = float(val)
         # BUGFIX #10: all emotion comparisons were UPPERCASE but dominant
@@ -459,14 +471,18 @@ class PersonalityEngine:
 
     def _emotion_commentary(self, emotion: Dict[str, Any]) -> Optional[str]:
         """Optional micro-comment reflecting current affect."""
-        # BUGFIX #10: default was "CALM" (uppercase); normalize to lowercase
-        dominant = emotion.get("dominant", "calm").lower()
+        # BUGFIX #10: default was "CALM" (uppercase); normalize to lowercase.
+        # RE-AUDIT FIX (Bug #10 regression): see _modulate_by_emotion -- the
+        # emotions dict uses UPPERCASE keys, so we must look up with
+        # dominant.upper() otherwise intensity is always 0.0.
+        dominant_raw = emotion.get("dominant", "CALM")
+        dominant = dominant_raw.lower() if isinstance(dominant_raw, str) else "calm"
         # BUGFIX #10: intensity was read from wrong key "intensity" (doesn't exist);
         # must be extracted from the nested emotions dict, same as _modulate_by_emotion
         emotions = emotion.get("emotions", {})
         intensity = 0.0
-        if isinstance(emotions, dict) and dominant in emotions:
-            val = emotions[dominant]
+        if isinstance(emotions, dict):
+            val = emotions.get(dominant.upper(), emotions.get(dominant))
             if isinstance(val, (int, float)):
                 intensity = float(val)
         if intensity < 0.3:
