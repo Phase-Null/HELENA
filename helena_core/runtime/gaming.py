@@ -89,7 +89,10 @@ class GamingOptimizer:
         # Statistics
         self.detection_history = []
         self.optimization_history = []
-        
+
+        # BUGFIX #20: track pre-allocated memory reserve for gaming sessions
+        self._memory_reserve = None
+
         # Callbacks
         self.on_game_detected: Optional[Callable] = None
         self.on_game_ended: Optional[Callable] = None
@@ -384,10 +387,16 @@ class GamingOptimizer:
             except Exception as e:
                 logger.warning(f"GamingOptimizer: Failed to adjust priority for PID {pid}: {e}")
         
-        # Reserve memory if specified
+        # BUGFIX #20: Memory reservation was a stub (pass). Now actually reserves
+        # memory by pre-allocating a bytearray to reduce memory pressure during gaming.
         if session.game.memory_reservation_mb > 0:
-            # This would be implemented with memory management
-            pass
+            try:
+                reserve_bytes = session.game.memory_reservation_mb * 1024 * 1024
+                self._memory_reserve = bytearray(reserve_bytes)
+                optimizations_applied.append(f"memory_reserve:{session.game.memory_reservation_mb}MB")
+                logger.info(f"GamingOptimizer: Reserved {session.game.memory_reservation_mb}MB for {session.game.name}")
+            except MemoryError:
+                logger.warning(f"GamingOptimizer: Could not reserve {session.game.memory_reservation_mb}MB — insufficient memory")
         
         # Record optimizations
         self.optimization_history.append({
@@ -535,6 +544,8 @@ class GamingOptimizer:
         
         # Clear session
         self.active_session = None
+        # BUGFIX #20: release memory reservation when session ends
+        self._memory_reserve = None
     
     def add_game_profile(self, profile: GameProfile) -> bool:
         """Add a custom game profile"""
