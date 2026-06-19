@@ -76,7 +76,10 @@ class AutonomousTrainer:
         logger.info("AutonomousTrainer", "Training disabled")
 
     def is_training(self) -> bool:
-        return self.active_session
+        # BUGFIX #26: active_session was read outside the lock, creating a race
+        # condition with the lock-protected write in start_session/finally
+        with self.lock:
+            return self.active_session
 
     def start_session(self, focus_areas: Optional[List[str]] = None, reason: str = "manual") -> Dict[str, Any]:
         with self.lock:
@@ -132,6 +135,10 @@ class AutonomousTrainer:
                                                 perf_before=perf_before,
                                                 perf_after=perf_after)
                     logger.info("AutonomousTrainer", f"Applied patch: {patch['id']}")
+
+            # BUGFIX #25: dataset.save() was never called after modifications,
+            # causing data loss between sessions
+            self.dataset.save()
 
             self.last_session_time = time.time()
             return {"status": "success", "improvements_applied": len(valid_patches)}
