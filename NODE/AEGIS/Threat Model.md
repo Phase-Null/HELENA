@@ -55,28 +55,28 @@ This note organizes the content from `AEGIS_virtual_defence.md` as an Obsidian k
 
 ## Phased Development
 
-### Phase 0 — Foundation ✅
+### Phase 0 — Foundation
 - IPC framework (Rust ↔ Python via TCP)
 - Core protocol definitions (Message, Finding, AgentReport)
 - Python bridge (`aegis_python/aegis_bridge.py`)
 
-### Phase 1 — Autonomous Agents ✅
+### Phase 1 — Autonomous Agents
 - 16 agents (4 variants each of Network, Integrity, Process, Intrusion)
 - Agent trait system (config, scan, interval, threshold)
 - Cross-agent correlation via SharedContext
 
-### Phase 2 — ETW Integration ✅
+### Phase 2 — ETW Integration
 - 3 ETW provider consumers (Kernel-Process, DNS-Client, Security-Auditing)
 - Suspicious pattern detection (process images, command lines, DNS queries)
 - Heartbeat monitoring (60s silence = alert)
 
-### Phase 3 — WFP Firewall ✅
+### Phase 3 — WFP Firewall
 - Windows Filtering Platform engine
 - IP blocking, port blocking, loopback-only protection
 - Response tiers with automated actions
 - Port 47201 self-protection (Bug #4 fix)
 
-### Phase 3a — Security Hardening ✅ (Current)
+### Phase 3a — Security Hardening (Current)
 - Per-step SSM memory optimization
 - ETW heartbeat monitoring
 - Port 47201 self-protection
