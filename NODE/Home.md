@@ -4,7 +4,7 @@ date: 2026-03-05
 status: active
 ---
 
-# 🏠 NODE — HELENA Knowledge Vault Dashboard
+# NODE — HELENA Knowledge Vault Dashboard
 
 > [!quote] HELENA is not a chatbot. She is an AI system being built to evolve.
 > — [[HELENA]]
@@ -13,7 +13,7 @@ Welcome to **NODE**, HELENA's knowledge organization system. This vault stores a
 
 ---
 
-## ⚡ Architecture
+## Architecture
 
 > [!info] Core System Components
 > HELENA's architecture is a layered system: Kernel → Memory → Runtime → ML → Desktop
@@ -32,7 +32,7 @@ Welcome to **NODE**, HELENA's knowledge organization system. This vault stores a
 
 ---
 
-## 🔒 AEGIS — Security Core
+## AEGIS — Security Core
 
 > [!warning] AEGIS is HELENA's security nervous system
 > Rust-based, kernel-level visibility, ETW monitoring, WFP firewall, 16 agents
@@ -49,7 +49,7 @@ Welcome to **NODE**, HELENA's knowledge organization system. This vault stores a
 
 ---
 
-## 🧠 Training
+## Training
 
 > [!tip] Training Pipeline
 > HELENA-Net BASE targets <500ms CPU inference, ~50M active params, 4GB RAM minimum
@@ -63,7 +63,7 @@ Welcome to **NODE**, HELENA's knowledge organization system. This vault stores a
 
 ---
 
-## 🛠 Templates
+## Templates
 
 | Template | Use Case |
 |----------|----------|
@@ -73,13 +73,13 @@ Welcome to **NODE**, HELENA's knowledge organization system. This vault stores a
 
 ---
 
-## 🐛 Quick Links — Bug Fixes by Severity
+## Quick Links — Bug Fixes by Severity
 
 > [!danger] CRITICAL Bugs (P0)
-> [[Bug Fixes Registry#Bug 1]] — Trainer constructor missing `runtime` argument ✅ **Fixed**
-> [[Bug Fixes Registry#Bug 2]] — `Intent.QUESTION` does not exist ✅ **Fixed**
-> [[Bug Fixes Registry#Bug 3]] — `validation_result.errors` should be `.issues` ✅ **Fixed**
-> [[Bug Fixes Registry#Bug 4]] — AEGIS Firewall loopback permit allows ALL traffic ✅ **Fixed**
+> [[Bug Fixes Registry#Bug 1]] — Trainer constructor missing `runtime` argument **Fixed**
+> [[Bug Fixes Registry#Bug 2]] — `Intent.QUESTION` does not exist **Fixed**
+> [[Bug Fixes Registry#Bug 3]] — `validation_result.errors` should be `.issues` **Fixed**
+> [[Bug Fixes Registry#Bug 4]] — AEGIS Firewall loopback permit allows ALL traffic **Fixed**
 
 > [!warning] HIGH Bugs (P1) — Needs Fix
 > [[Bug Fixes Registry#Bug 5]] — `wipe_memory` dead code
