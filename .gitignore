@@ -40,3 +40,33 @@ models/*.bin
 # Database files
 *.db
 *.sqlite3
+
+# Obsidian — personal workspace state (panel sizes, open tabs)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/workspace-tablet.json
+
+# Obsidian plugin data — may contain secrets (Local REST API token!)
+.obsidian/plugins/obsidian-local-rest-api/data.json
+.obsidian/plugins/obsidian-local-rest-api/main.js
+.obsidian/plugins/obsidian-local-rest-api/manifest.json
+
+# Obsidian graph cache
+.obsidian/graph.json
+.obsidian/.cache
+
+# HELENA — short-TTL working memory (regenerated each session)
+NODE/Memory/Working/*.md
+
+# HELENA — archived memories (kept locally, not version-controlled)
+NODE/.archive/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
